@@ -6,8 +6,18 @@ import xml.etree.ElementTree as ET
 import os
 import re
 import socketserver
+import time
 
 PORT = 8080
+
+CACHE = {
+    'nifty50': None,
+    'niftyTime': 0,
+    'gold': None,
+    'goldTime': 0,
+    'usdInr': None,
+    'usdInrTime': 0
+}
 
 # Helper function to fetch URL with custom user-agent and timeout
 def fetch_url(url, headers=None, method='GET', data=None):
@@ -124,8 +134,35 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
         }).encode('utf-8'))
 
     def handle_api_market(self):
-        data = {
-            "nifty50": {
+        global CACHE
+        now = time.time()
+        
+        # 1. Fetch USD/INR Rate
+        usd_data = None
+        if CACHE.get('usdInr') and (now - CACHE.get('usdInrTime', 0) < 30 * 60):
+            usd_data = CACHE['usdInr']
+        else:
+            usd_data = {
+                "rate": 83.50,
+                "change": 0.0
+            }
+            try:
+                usd_status, _, usd_body = fetch_url('https://open.er-api.com/v6/latest/USD')
+                if usd_status == 200:
+                    ex_data = json.loads(usd_body)
+                    inr_rate = ex_data.get('rates', {}).get('INR', 83.50)
+                    usd_data['rate'] = inr_rate
+            except Exception:
+                pass
+            CACHE['usdInr'] = usd_data
+            CACHE['usdInrTime'] = now
+
+        # 2. Fetch Nifty 50 (^NSEI)
+        nifty_data = None
+        if CACHE.get('nifty50') and (now - CACHE.get('niftyTime', 0) < 10 * 60):
+            nifty_data = CACHE['nifty50']
+        else:
+            nifty_data = {
                 "price": 0.0,
                 "change": 0.0,
                 "changePercent": 0.0,
@@ -137,8 +174,124 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                 "monthlyMax": 0.0,
                 "percentile": 50.0,
                 "sipRecommendation": "Accumulate (DCA)"
-            },
-            "gold": {
+            }
+            try:
+                nifty_status, _, nifty_body = fetch_url('https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?range=1mo&interval=1d')
+                if nifty_status == 200:
+                    nifty_json = json.loads(nifty_body)
+                    result = nifty_json.get('chart', {}).get('result', [None])[0]
+                    if result:
+                        meta = result.get('meta', {})
+                        current_price = meta.get('regularMarketPrice', 0.0)
+                        prev_close = meta.get('previousClose', current_price)
+                        change = current_price - prev_close
+                        change_pct = (change / prev_close) * 100 if prev_close else 0.0
+
+                        nifty_data['price'] = round(current_price, 2)
+                        nifty_data['change'] = round(change, 2)
+                        nifty_data['changePercent'] = round(change_pct, 2)
+
+                        adj_close = result.get('indicators', {}).get('quote', [{}])[0].get('close', [])
+                        prices = [p for p in adj_close if p is not None]
+
+                        if prices:
+                            if abs(prices[-1] - current_price) > 0.01:
+                                prices.append(current_price)
+                            nifty_data['historical'] = [round(p, 2) for p in prices[-10:]]
+
+                            rsi = calculate_rsi(prices, 14)
+                            nifty_data['rsi'] = rsi
+
+                            sma20 = sum(prices[-20:]) / min(len(prices), 20) if prices else current_price
+                            nifty_data['sma20'] = round(sma20, 2)
+
+                            # Calculate 1-month Nifty range & SIP Advice
+                            nifty_min = min(prices)
+                            nifty_max = max(prices)
+                            nifty_range = nifty_max - nifty_min
+                            nifty_pct = ((current_price - nifty_min) / nifty_range * 100) if nifty_range else 50.0
+
+                            nifty_data['monthlyMin'] = round(nifty_min, 2)
+                            nifty_data['monthlyMax'] = round(nifty_max, 2)
+                            nifty_data['percentile'] = round(nifty_pct, 2)
+
+                            if nifty_pct <= 30:
+                                nifty_data['sipRecommendation'] = "🟢 Great Time to Buy SIP (Near Monthly Low)"
+                            elif nifty_pct <= 70:
+                                nifty_data['sipRecommendation'] = "🟡 Average Price (DCA Accumulate)"
+                            else:
+                                nifty_data['sipRecommendation'] = "🔴 Price is High (Wait for Dip / Small DCA)"
+
+                            if rsi <= 35:
+                                nifty_data['recommendation'] = "Strong Buy (Oversold)"
+                            elif rsi >= 70:
+                                nifty_data['recommendation'] = "Hold/Sell (Overbought)"
+                            else:
+                                if current_price > sma20:
+                                    nifty_data['recommendation'] = "Buy (Bullish Trend)"
+                                else:
+                                    nifty_data['recommendation'] = "Accumulate (DCA)"
+                    else:
+                        raise Exception("Nifty response metadata missing")
+                else:
+                    raise Exception(f"Nifty response status {nifty_status}")
+            except Exception:
+                # Try Moneycontrol scraper as secondary live source!
+                try:
+                    mc_status, _, mc_body = fetch_url('https://www.moneycontrol.com/indian-indices/nifty-50-9.html')
+                    if mc_status == 200:
+                        price_match = re.search(r'id="sp_val">([^<]+)', mc_body)
+                        prev_close_match = re.search(r'id="sp_previousclose">([^<]+)', mc_body)
+                        if price_match and prev_close_match:
+                            current_price = float(price_match.group(1).replace(',', ''))
+                            prev_close = float(prev_close_match.group(1).replace(',', ''))
+                            change = current_price - prev_close
+                            change_pct = (change / prev_close) * 100
+                            
+                            nifty_data['price'] = round(current_price, 2)
+                            nifty_data['change'] = round(change, 2)
+                            nifty_data['changePercent'] = round(change_pct, 2)
+                            
+                            base = current_price
+                            nifty_data['historical'] = [
+                                round(base - 200, 2), round(base - 150, 2), round(base - 100, 2),
+                                round(base - 120, 2), round(base - 50, 2), round(base - 80, 2),
+                                round(base - 30, 2), round(base - 10, 2), round(base + 20, 2), round(base, 2)
+                            ]
+                            nifty_data['rsi'] = 48.5
+                            nifty_data['sma20'] = round(current_price - 50, 2)
+                            nifty_data['recommendation'] = "Accumulate (DCA - Live Scrape)"
+                            nifty_data['monthlyMin'] = round(current_price - 300, 2)
+                            nifty_data['monthlyMax'] = round(current_price + 200, 2)
+                            nifty_data['percentile'] = 60.0
+                            nifty_data['sipRecommendation'] = "🟡 Average Price (DCA - Live Scrape)"
+                        else:
+                            raise Exception("Moneycontrol regex match failed")
+                    else:
+                        raise Exception(f"Moneycontrol response status {mc_status}")
+                except Exception:
+                    # Final mock fallback
+                    nifty_data['price'] = 23366.70
+                    nifty_data['change'] = -49.85
+                    nifty_data['changePercent'] = -0.21
+                    nifty_data['recommendation'] = "Accumulate (DCA - Fallback)"
+                    nifty_data['historical'] = [23100, 23150, 23200, 23120, 23300, 23250, 23280, 23310, 23330, 23366.70]
+                    nifty_data['rsi'] = 51.5
+                    nifty_data['sma20'] = 23250.00
+                    nifty_data['monthlyMin'] = 23100.00
+                    nifty_data['monthlyMax'] = 23366.70
+                    nifty_data['percentile'] = 100.0
+                    nifty_data['sipRecommendation'] = "🔴 Price is High (Wait for Dip / Fallback)"
+            
+            CACHE['nifty50'] = nifty_data
+            CACHE['niftyTime'] = now
+
+        # 3. Fetch Gold rates (USD International spot & INR Domestic retail)
+        gold_data = None
+        if CACHE.get('gold') and (now - CACHE.get('goldTime', 0) < 30 * 60):
+            gold_data = CACHE['gold']
+        else:
+            gold_data = {
                 "priceUSD_oz": 0.0,
                 "priceINR_10g_24k": 0.0,
                 "priceINR_10g_22k": 0.0,
@@ -149,250 +302,130 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                 "monthlyMax": 0.0,
                 "percentile": 50.0,
                 "sipRecommendation": "Accumulate (DCA)"
-            },
-            "usdInr": {
-                "rate": 0.0,
-                "change": 0.0
             }
-        }
-        
-        # 1. Fetch USD/INR Rate
-        try:
-            usd_status, _, usd_body = fetch_url('https://open.er-api.com/v6/latest/USD')
-            if usd_status == 200:
-                ex_data = json.loads(usd_body)
-                inr_rate = ex_data.get('rates', {}).get('INR', 83.50)
-                data['usdInr']['rate'] = inr_rate
-            else:
-                data['usdInr']['rate'] = 83.50
-        except Exception:
-            data['usdInr']['rate'] = 83.50
+            current_gold_usd = 4328.00
+            change_pct = 0.12
+            usd_fetch_success = False
+            gold_history_usd = []
 
-        # 2. Fetch Nifty 50 (^NSEI)
-        try:
-            nifty_status, _, nifty_body = fetch_url('https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?range=1mo&interval=1d')
-            if nifty_status == 200:
-                nifty_json = json.loads(nifty_body)
-                result = nifty_json.get('chart', {}).get('result', [None])[0]
-                if result:
-                    meta = result.get('meta', {})
-                    current_price = meta.get('regularMarketPrice', 0.0)
-                    prev_close = meta.get('previousClose', current_price)
-                    change = current_price - prev_close
-                    change_pct = (change / prev_close) * 100 if prev_close else 0.0
-
-                    data['nifty50']['price'] = round(current_price, 2)
-                    data['nifty50']['change'] = round(change, 2)
-                    data['nifty50']['changePercent'] = round(change_pct, 2)
-
-                    adj_close = result.get('indicators', {}).get('quote', [{}])[0].get('close', [])
-                    prices = [p for p in adj_close if p is not None]
-
-                    if prices:
-                        if abs(prices[-1] - current_price) > 0.01:
-                            prices.append(current_price)
-                        data['nifty50']['historical'] = [round(p, 2) for p in prices[-10:]]
-
-                        rsi = calculate_rsi(prices, 14)
-                        data['nifty50']['rsi'] = rsi
-
-                        sma20 = sum(prices[-20:]) / min(len(prices), 20) if prices else current_price
-                        data['nifty50']['sma20'] = round(sma20, 2)
-
-                        # Calculate 1-month Nifty range & SIP Advice
-                        nifty_min = min(prices)
-                        nifty_max = max(prices)
-                        nifty_range = nifty_max - nifty_min
-                        nifty_pct = ((current_price - nifty_min) / nifty_range * 100) if nifty_range else 50.0
-
-                        data['nifty50']['monthlyMin'] = round(nifty_min, 2)
-                        data['nifty50']['monthlyMax'] = round(nifty_max, 2)
-                        data['nifty50']['percentile'] = round(nifty_pct, 2)
-
-                        if nifty_pct <= 30:
-                            data['nifty50']['sipRecommendation'] = "🟢 Great Time to Buy SIP (Near Monthly Low)"
-                        elif nifty_pct <= 70:
-                            data['nifty50']['sipRecommendation'] = "🟡 Average Price (DCA Accumulate)"
-                        else:
-                            data['nifty50']['sipRecommendation'] = "🔴 Price is High (Wait for Dip / Small DCA)"
-
-                        if rsi <= 35:
-                            data['nifty50']['recommendation'] = "Strong Buy (Oversold)"
-                        elif rsi >= 70:
-                            data['nifty50']['recommendation'] = "Hold/Sell (Overbought)"
-                        else:
-                            if current_price > sma20:
-                                data['nifty50']['recommendation'] = "Buy (Bullish Trend)"
-                            else:
-                                data['nifty50']['recommendation'] = "Accumulate (DCA)"
-                else:
-                    raise Exception("Nifty response metadata missing")
-            else:
-                raise Exception(f"Nifty response status {nifty_status}")
-        except Exception:
-            # Try Moneycontrol scraper as secondary live source!
+            # Step 3a: Fetch International USD Spot Price (Yahoo or CoinGecko fallback)
             try:
-                mc_status, _, mc_body = fetch_url('https://www.moneycontrol.com/indian-indices/nifty-50-9.html')
-                if mc_status == 200:
-                    price_match = re.search(r'id="sp_val">([^<]+)', mc_body)
-                    prev_close_match = re.search(r'id="sp_previousclose">([^<]+)', mc_body)
-                    if price_match and prev_close_match:
-                        current_price = float(price_match.group(1).replace(',', ''))
-                        prev_close = float(prev_close_match.group(1).replace(',', ''))
-                        change = current_price - prev_close
-                        change_pct = (change / prev_close) * 100
+                gold_status, _, gold_body = fetch_url('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1mo&interval=1d')
+                if gold_status == 200:
+                    gold_json = json.loads(gold_body)
+                    result = gold_json.get('chart', {}).get('result', [None])[0]
+                    if result:
+                        meta = result.get('meta', {})
+                        current_gold_usd = meta.get('regularMarketPrice', current_gold_usd)
+                        prev_close = meta.get('previousClose', current_gold_usd)
+                        change_pct = ((current_gold_usd - prev_close) / prev_close) * 100 if prev_close else change_pct
                         
-                        data['nifty50']['price'] = round(current_price, 2)
-                        data['nifty50']['change'] = round(change, 2)
-                        data['nifty50']['changePercent'] = round(change_pct, 2)
-                        
-                        base = current_price
-                        data['nifty50']['historical'] = [
-                            round(base - 200, 2), round(base - 150, 2), round(base - 100, 2),
-                            round(base - 120, 2), round(base - 50, 2), round(base - 80, 2),
-                            round(base - 30, 2), round(base - 10, 2), round(base + 20, 2), round(base, 2)
-                        ]
-                        data['nifty50']['rsi'] = 48.5
-                        data['nifty50']['sma20'] = round(current_price - 50, 2)
-                        data['nifty50']['recommendation'] = "Accumulate (DCA - Live Scrape)"
-                        data['nifty50']['monthlyMin'] = round(current_price - 300, 2)
-                        data['nifty50']['monthlyMax'] = round(current_price + 200, 2)
-                        data['nifty50']['percentile'] = 60.0
-                        data['nifty50']['sipRecommendation'] = "🟡 Average Price (DCA - Live Scrape)"
-                    else:
-                        raise Exception("Moneycontrol regex match failed")
-                else:
-                    raise Exception(f"Moneycontrol response status {mc_status}")
-            except Exception:
-                # Final mock fallback
-                data['nifty50']['price'] = 23366.70
-                data['nifty50']['change'] = -49.85
-                data['nifty50']['changePercent'] = -0.21
-                data['nifty50']['recommendation'] = "Accumulate (DCA - Fallback)"
-                data['nifty50']['historical'] = [23100, 23150, 23200, 23120, 23300, 23250, 23280, 23310, 23330, 23366.70]
-                data['nifty50']['rsi'] = 51.5
-                data['nifty50']['sma20'] = 23250.00
-                data['nifty50']['monthlyMin'] = 23100.00
-                data['nifty50']['monthlyMax'] = 23366.70
-                data['nifty50']['percentile'] = 100.0
-                data['nifty50']['sipRecommendation'] = "🔴 Price is High (Wait for Dip / Fallback)"
-
-        # 3. Fetch Gold rates (USD International spot & INR Domestic retail)
-        current_gold_usd = 4328.00
-        change_pct = 0.12
-        usd_fetch_success = False
-        gold_history_usd = []
-
-        # Step 3a: Fetch International USD Spot Price (Yahoo or CoinGecko fallback)
-        try:
-            gold_status, _, gold_body = fetch_url('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1mo&interval=1d')
-            if gold_status == 200:
-                gold_json = json.loads(gold_body)
-                result = gold_json.get('chart', {}).get('result', [None])[0]
-                if result:
-                    meta = result.get('meta', {})
-                    current_gold_usd = meta.get('regularMarketPrice', current_gold_usd)
-                    prev_close = meta.get('previousClose', current_gold_usd)
-                    change_pct = ((current_gold_usd - prev_close) / prev_close) * 100 if prev_close else change_pct
-                    
-                    adj_close = result.get('indicators', {}).get('quote', [{}])[0].get('close', [])
-                    gold_history_usd = [p for p in adj_close if p is not None]
-                    usd_fetch_success = True
-        except Exception:
-            pass
-
-        if not usd_fetch_success:
-            try:
-                cg_status, _, cg_body = fetch_url('https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd')
-                if cg_status == 200:
-                    cg_json = json.loads(cg_body)
-                    current_gold_usd = cg_json.get('pax-gold', {}).get('usd', current_gold_usd)
-                    usd_fetch_success = True
+                        adj_close = result.get('indicators', {}).get('quote', [{}])[0].get('close', [])
+                        gold_history_usd = [p for p in adj_close if p is not None]
+                        usd_fetch_success = True
             except Exception:
                 pass
 
-        data['gold']['priceUSD_oz'] = round(current_gold_usd, 2)
-        data['gold']['changePercent'] = round(change_pct, 2)
+            if not usd_fetch_success:
+                try:
+                    cg_status, _, cg_body = fetch_url('https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd')
+                    if cg_status == 200:
+                        cg_json = json.loads(cg_body)
+                        current_gold_usd = cg_json.get('pax-gold', {}).get('usd', current_gold_usd)
+                        usd_fetch_success = True
+                except Exception:
+                    pass
 
-        # Step 3b: Fetch Domestic INR Gold Price (Scraping Goodreturns for accurate retail rates)
-        scraped_success = False
-        price_24k = 0.0
-        price_22k = 0.0
+            gold_data['priceUSD_oz'] = round(current_gold_usd, 2)
+            gold_data['changePercent'] = round(change_pct, 2)
 
-        try:
-            gr_status, _, gr_body = fetch_url('https://www.goodreturns.in/gold-rates/')
-            if gr_status == 200:
-                p24_match = re.search(r'id="24K-price"[^>]*>&#x20b9;([\d,]+)</span>', gr_body)
-                p22_match = re.search(r'id="22K-price"[^>]*>&#x20b9;([\d,]+)</span>', gr_body)
-                if p24_match and p22_match:
-                    price_24k = float(p24_match.group(1).replace(',', '')) * 10
-                    price_22k = float(p22_match.group(1).replace(',', '')) * 10
-                    
-                    data['gold']['priceINR_10g_24k'] = round(price_24k, 2)
-                    data['gold']['priceINR_10g_22k'] = round(price_22k, 2)
-                    
-                    # Parse change pill for domestic percentage change
-                    pill_match = re.search(r'id="24K-price".*?class="gr-change-pill\s+(gr-change-up|gr-change-down)"[^>]*>\s*<p>([^<]+)</p>', gr_body, re.DOTALL)
-                    if pill_match:
-                        direction = pill_match.group(1)
-                        value_str = pill_match.group(2).replace('&nbsp;', '').replace('-', '').strip()
-                        val = float(value_str) * 10
-                        if direction == 'gr-change-down':
-                            val = -val
-                        prev_price = price_24k - val
-                        change_pct_domestic = (val / prev_price) * 100 if prev_price else 0.0
-                        data['gold']['changePercent'] = round(change_pct_domestic, 2)
-                    scraped_success = True
-        except Exception:
-            pass
+            # Step 3b: Fetch Domestic INR Gold Price (Scraping Goodreturns for accurate retail rates)
+            scraped_success = False
+            price_24k = 0.0
+            price_22k = 0.0
 
-        # Step 3c: Fallback calculation if scraping fails
-        if not scraped_success:
-            rate = data['usdInr']['rate']
-            # Apply 1.305 multiplier to spot price to account for 15% customs duty, 3% GST, and IBJA retail premiums
-            gold_inr_per_gram = (current_gold_usd * rate * 1.305) / 31.1034768
-            price_24k = gold_inr_per_gram * 10
-            price_22k = price_24k * 0.916
-            
-            data['gold']['priceINR_10g_24k'] = round(price_24k, 2)
-            data['gold']['priceINR_10g_22k'] = round(price_22k, 2)
+            try:
+                gr_status, _, gr_body = fetch_url('https://www.goodreturns.in/gold-rates/')
+                if gr_status == 200:
+                    p24_match = re.search(r'id="24K-price"[^>]*>&#x20b9;([\d,]+)</span>', gr_body)
+                    p22_match = re.search(r'id="22K-price"[^>]*>&#x20b9;([\d,]+)</span>', gr_body)
+                    if p24_match and p22_match:
+                        price_24k = float(p24_match.group(1).replace(',', '')) * 10
+                        price_22k = float(p22_match.group(1).replace(',', '')) * 10
+                        
+                        gold_data['priceINR_10g_24k'] = round(price_24k, 2)
+                        gold_data['priceINR_10g_22k'] = round(price_22k, 2)
+                        
+                        # Parse change pill for domestic percentage change
+                        pill_match = re.search(r'id="24K-price".*?class="gr-change-pill\s+(gr-change-up|gr-change-down)"[^>]*>\s*<p>([^<]+)</p>', gr_body, re.DOTALL)
+                        if pill_match:
+                            direction = pill_match.group(1)
+                            value_str = pill_match.group(2).replace('&nbsp;', '').replace('-', '').strip()
+                            val = float(value_str) * 10
+                            if direction == 'gr-change-down':
+                                val = -val
+                            prev_price = price_24k - val
+                            change_pct_domestic = (val / prev_price) * 100 if prev_price else 0.0
+                            gold_data['changePercent'] = round(change_pct_domestic, 2)
+                        scraped_success = True
+            except Exception:
+                pass
 
-        # Step 3d: Set 1-gram rates and calculate 30-day Range & SIP Advice
-        price_24k_1g = price_24k / 10
-        price_22k_1g = price_22k / 10
-        data['gold']['priceINR_1g_24k'] = round(price_24k_1g, 2)
-        data['gold']['priceINR_1g_22k'] = round(price_22k_1g, 2)
+            # Step 3c: Fallback calculation if scraping fails
+            if not scraped_success:
+                rate = usd_data['rate']
+                # Apply 1.305 multiplier to spot price to account for 15% customs duty, 3% GST, and IBJA retail premiums
+                gold_inr_per_gram = (current_gold_usd * rate * 1.305) / 31.1034768
+                price_24k = gold_inr_per_gram * 10
+                price_22k = price_24k * 0.916
+                
+                gold_data['priceINR_10g_24k'] = round(price_24k, 2)
+                gold_data['priceINR_10g_22k'] = round(price_22k, 2)
 
-        if gold_history_usd:
-            # Calibrate ratio based on current Goodreturns/fallback price vs USD spot
-            ratio = price_24k_1g / (current_gold_usd / 31.1034768)
-            gold_history_inr_1g = [round((p_usd / 31.1034768) * ratio, 2) for p_usd in gold_history_usd]
-            
-            gold_min = min(gold_history_inr_1g)
-            gold_max = max(gold_history_inr_1g)
-            gold_range = gold_max - gold_min
-            gold_pct = ((price_24k_1g - gold_min) / gold_range * 100) if gold_range else 50.0
-            
-            data['gold']['monthlyMin'] = round(gold_min, 2)
-            data['gold']['monthlyMax'] = round(gold_max, 2)
-            data['gold']['percentile'] = round(gold_pct, 2)
-            
-            if gold_pct <= 30:
-                data['gold']['sipRecommendation'] = "🟢 Great Time to Buy SIP (Near Monthly Low)"
-            elif gold_pct <= 70:
-                data['gold']['sipRecommendation'] = "🟡 Average Price (DCA Accumulate)"
+            # Step 3d: Set 1-gram rates and calculate 30-day Range & SIP Advice
+            price_24k_1g = price_24k / 10
+            price_22k_1g = price_22k / 10
+            gold_data['priceINR_1g_24k'] = round(price_24k_1g, 2)
+            gold_data['priceINR_1g_22k'] = round(price_22k_1g, 2)
+
+            if gold_history_usd:
+                # Calibrate ratio based on current Goodreturns/fallback price vs USD spot
+                ratio = price_24k_1g / (current_gold_usd / 31.1034768)
+                gold_history_inr_1g = [round((p_usd / 31.1034768) * ratio, 2) for p_usd in gold_history_usd]
+                
+                gold_min = min(gold_history_inr_1g)
+                gold_max = max(gold_history_inr_1g)
+                gold_range = gold_max - gold_min
+                gold_pct = ((price_24k_1g - gold_min) / gold_range * 100) if gold_range else 50.0
+                
+                gold_data['monthlyMin'] = round(gold_min, 2)
+                gold_data['monthlyMax'] = round(gold_max, 2)
+                gold_data['percentile'] = round(gold_pct, 2)
+                
+                if gold_pct <= 30:
+                    gold_data['sipRecommendation'] = "🟢 Great Time to Buy SIP (Near Monthly Low)"
+                elif gold_pct <= 70:
+                    gold_data['sipRecommendation'] = "🟡 Average Price (DCA Accumulate)"
+                else:
+                    gold_data['sipRecommendation'] = "🔴 Price is High (Wait for Dip / Small DCA)"
             else:
-                data['gold']['sipRecommendation'] = "🔴 Price is High (Wait for Dip / Small DCA)"
-        else:
-            data['gold']['monthlyMin'] = round(price_24k_1g * 0.98, 2)
-            data['gold']['monthlyMax'] = round(price_24k_1g * 1.02, 2)
-            data['gold']['percentile'] = 50.0
-            data['gold']['sipRecommendation'] = "🟡 Average Price (DCA - Fallback Estimate)"
+                gold_data['monthlyMin'] = round(price_24k_1g * 0.98, 2)
+                gold_data['monthlyMax'] = round(price_24k_1g * 1.02, 2)
+                gold_data['percentile'] = 50.0
+                gold_data['sipRecommendation'] = "🟡 Average Price (DCA - Fallback Estimate)"
+            
+            CACHE['gold'] = gold_data
+            CACHE['goldTime'] = now
 
+        response_data = {
+            "nifty50": nifty_data,
+            "gold": gold_data,
+            "usdInr": usd_data
+        }
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode('utf-8'))
+        self.wfile.write(json.dumps(response_data).encode('utf-8'))
 
     def handle_api_news(self):
         news_items = []

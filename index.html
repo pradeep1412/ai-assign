@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <!-- Vanilla CSS Stylesheet -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=1.1">
   <!-- PDF.js CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 </head>
@@ -341,9 +341,13 @@
             </div>
             <div class="market-card-metric relative">
               <span class="card-label">Gold Price (Ounce USD)</span>
-              <div style="display: flex; align-items: baseline; gap: 8px; justify-content: center; flex-wrap: wrap;">
+              <div class="gold-price-row">
                 <h2 id="market-gold-price-usd">$---</h2>
                 <span id="gold-monthly-low-badge" class="gold-alert-badge hidden">📉 Monthly Low!</span>
+              </div>
+              <div class="gold-india-row">
+                <span>🇮🇳 India (24K 1g):</span>
+                <span id="market-gold-price-inr" class="price-inr">₹---</span>
               </div>
               <span id="market-gold-change-usd" class="trend-indicator">---</span>
             </div>
@@ -941,7 +945,7 @@
   <!-- Lucide Icons Library -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Main application scripts (ES Modules) -->
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=1.2"></script>
 
 </body>
 </html>

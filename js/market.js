@@ -156,6 +156,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (mGoldPriceUsd) mGoldPriceUsd.textContent = fmtUSD(data.gold.priceUSD_oz);
+    const mGoldPriceInr = document.getElementById('market-gold-price-inr');
+    if (mGoldPriceInr) mGoldPriceInr.textContent = fmtINR(goldRate24kPerGram);
     if (mGoldChangeUsd) {
       mGoldChangeUsd.textContent = `${data.gold.changePercent >= 0 ? '▲ +' : '▼ '}${data.gold.changePercent}%`;
       mGoldChangeUsd.className = 'trend-indicator ' + (data.gold.changePercent >= 0 ? 'price-up' : 'price-down');
@@ -474,6 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 5. Gold rate weight calculator
   function calculateGoldPrice() {
+    if (!calcWeight || !calcKarat || !calcMaking || !calcResultPrice) return;
     if (goldRate24kPerGram <= 0) return;
 
     const weight = parseFloat(calcWeight.value) || 0;
@@ -514,7 +517,18 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchMarketData();
   });
 
-  // Initial fetch and set interval loop (fetch every 3 minutes)
+  // Load from local storage cache first for instant render on page load
+  const cached = localStorage.getItem('cached_market_data');
+  if (cached) {
+    try {
+      const cachedData = JSON.parse(cached);
+      updateMarketUI(cachedData, true); // Mark as cached
+    } catch (e) {
+      console.error("Cache parse error during init:", e);
+    }
+  }
+
+  // Initial fetch and set interval loop (fetch every 10 minutes)
   fetchMarketData();
-  setInterval(fetchMarketData, 180000);
+  setInterval(fetchMarketData, 600000);
 });
