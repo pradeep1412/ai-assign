@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity - AI & Market Dashboard</title>
+  <!-- SEO Tags -->
+  <meta name="description" content="A premium minimalist web dashboard featuring a custom PDF-to-Podcast reader, live Gold & Nifty 50 trackers, RSS daily news feed with AI summaries, and an interactive developer AI console.">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <!-- Vanilla CSS Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+  <!-- PDF.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+</head>
+<body class="dark-theme">
+
+  <!-- Header & Live Ticker -->
+  <header class="app-header">
+    <div class="logo-container">
+      <div class="logo-orb"></div>
+      <h1 class="logo-text">Antigravity</h1>
+    </div>
+    
+    <div class="live-ticker" id="live-ticker">
+      <div class="ticker-item" id="ticker-nifty">
+        <a href="https://www.moneycontrol.com/indian-indices/nifty-50-9.html" target="_blank" class="ticker-link">
+          <span class="ticker-label">NIFTY 50:</span>
+          <span class="ticker-val loading-pulse">---</span>
+          <span class="ticker-pct"></span>
+        </a>
+      </div>
+      <div class="ticker-item" id="ticker-gold">
+        <a href="https://www.goodreturns.in/gold-rates/" target="_blank" class="ticker-link">
+          <span class="ticker-label">GOLD (1g):</span>
+          <span class="ticker-val loading-pulse">---</span>
+        </a>
+      </div>
+      <div class="ticker-item" id="ticker-usd">
+        <span class="ticker-label">USD/INR:</span>
+        <span class="ticker-val loading-pulse">---</span>
+      </div>
+      <div class="ticker-item" id="ticker-cost">
+        <span class="ticker-label">API COST:</span>
+        <span class="ticker-val price-up">$0.00000</span>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="dashboard-tab" id="nav-dashboard">
+        <i data-lucide="layout-dashboard"></i><span>Dashboard</span>
+      </button>
+      <button class="tab-btn" data-tab="pdf-tab" id="nav-pdf">
+        <i data-lucide="book-open"></i><span>PDF Podcast</span>
+      </button>
+      <button class="tab-btn" data-tab="market-tab" id="nav-market">
+        <i data-lucide="trending-up"></i><span>Market</span>
+      </button>
+      <button class="tab-btn" data-tab="news-tab" id="nav-news">
+        <i data-lucide="newspaper"></i><span>News</span>
+      </button>
+      <button class="tab-btn" data-tab="chat-tab" id="nav-chat">
+        <i data-lucide="message-square-code"></i><span>AI Console</span>
+      </button>
+      <button class="tab-btn" data-tab="settings-tab" id="nav-settings">
+        <i data-lucide="settings"></i><span>Settings</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="app-main">
+
+    <!-- Tab 1: Dashboard -->
+    <section id="dashboard-tab" class="tab-content active">
+      <div class="dashboard-grid">
+        
+        <!-- Welcome Card & Stats -->
+        <div class="grid-card col-span-2 welcome-card">
+          <div class="welcome-left">
+            <h2>Welcome back</h2>
+            <p>Your unified AI companion & financial terminal. All tasks run locally or serverless with live cost telemetry.</p>
+            <div class="stats-row">
+              <div class="stat-box">
+                <span class="stat-num" id="stat-read-pages">0</span>
+                <span class="stat-label">PDF Pages Read</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-num" id="stat-chat-sessions">0</span>
+                <span class="stat-label">AI Chats</span>
+              </div>
+              <div class="stat-box font-mono">
+                <span class="stat-num" id="stat-total-cost">$0.0000</span>
+                <span class="stat-label">Total Spend</span>
+              </div>
+            </div>
+          </div>
+          <div class="welcome-right">
+            <div class="glow-orb"></div>
+          </div>
+        </div>
+
+        <!-- Quick AI Access -->
+        <div class="grid-card ai-quick-card">
+          <h3>Quick AI Helper</h3>
+          <p class="subtitle">Ask your active AI model any question instantly.</p>
+          <div class="quick-chat-input-wrap">
+            <input type="text" id="quick-ai-input" placeholder="Type a prompt to ask Gemini/Nvidia...">
+            <button id="quick-ai-btn"><i data-lucide="arrow-right"></i></button>
+          </div>
+          <div class="quick-ai-response-box" id="quick-ai-response" style="display: none;">
+            <div class="loader" id="quick-ai-loader" style="display: none;"></div>
+            <div class="quick-ai-txt" id="quick-ai-text"></div>
+          </div>
+        </div>
+
+        <!-- Market Sentiment Card -->
+        <div class="grid-card market-sentiment-card">
+          <div class="card-header-flex">
+            <h3>Investability Matrix</h3>
+            <a href="https://www.moneycontrol.com/indian-indices/nifty-50-9.html" target="_blank" class="verification-badge">
+              <i data-lucide="check-circle" class="badge-icon"></i>
+              <span>✓ Moneycontrol Verified</span>
+            </a>
+          </div>
+          <p class="subtitle">Nifty 50 real-time trend strength analysis.</p>
+          <div class="sentiment-meter-container">
+            <div class="sentiment-gauge-track">
+              <div class="sentiment-gauge-needle" id="sentiment-needle" style="transform: rotate(0deg);"></div>
+            </div>
+            <div class="sentiment-value" id="sentiment-value">Neutral</div>
+          </div>
+          <div class="indicators-summary">
+            <div class="ind-row">
+              <span>Nifty RSI-14</span>
+              <span id="sentiment-rsi" class="font-mono">50.0</span>
+            </div>
+            <div class="ind-row">
+              <span>SMA-20 Deviation</span>
+              <span id="sentiment-sma" class="font-mono">---</span>
+            </div>
+            <div class="ind-row mt-2 border-t pt-2">
+              <span class="fw-600">Invest Recommendation</span>
+              <span id="sentiment-rec" class="badge bg-neutral font-mono">Hold</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gold Gold Gold -->
+        <div class="grid-card gold-quick-card">
+          <div class="card-header-flex">
+            <h3>Gold Spot India</h3>
+            <a href="https://www.goodreturns.in/gold-rates/" target="_blank" class="verification-badge">
+              <i data-lucide="check-circle" class="badge-icon"></i>
+              <span>✓ Goodreturns Verified</span>
+            </a>
+          </div>
+          <p class="subtitle">Indian market retail rates per 1 gram.</p>
+          <div class="gold-prices-stack">
+            <div class="gold-item-row gold-24k">
+              <div class="gold-type">
+                <span class="gold-crown"><i data-lucide="award"></i></span>
+                <div>
+                  <div class="gold-title">24 Karat Gold (1g)</div>
+                  <div class="gold-desc">99.9% Pure Spot Price</div>
+                </div>
+              </div>
+              <div class="gold-price font-mono" id="dash-gold-24k">₹---</div>
+            </div>
+            <div class="gold-item-row gold-22k">
+              <div class="gold-type">
+                <span class="gold-crown"><i data-lucide="gem"></i></span>
+                <div>
+                  <div class="gold-title">22 Karat Gold (1g)</div>
+                  <div class="gold-desc">91.6% Standard Jewelers</div>
+                </div>
+              </div>
+              <div class="gold-price font-mono" id="dash-gold-22k">₹---</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- News Feed Brief -->
+        <div class="grid-card news-brief-card">
+          <div class="card-header-flex">
+            <h3>Daily Briefs</h3>
+            <button class="text-btn" id="dash-view-all-news">View All News</button>
+          </div>
+          <p class="subtitle">Latest market and tech headlines from Google News RSS.</p>
+          <div class="news-brief-list" id="dash-news-list">
+            <div class="news-skeleton"></div>
+            <div class="news-skeleton"></div>
+            <div class="news-skeleton"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Tab 2: PDF to Podcast -->
+    <section id="pdf-tab" class="tab-content">
+      <div class="pdf-workspace">
+        <!-- Sidebar Upload & Controls -->
+        <div class="pdf-sidebar">
+          <div class="glass-section upload-area" id="pdf-drop-zone">
+            <i data-lucide="upload-cloud" class="upload-icon"></i>
+            <h4>Upload PDF Book</h4>
+            <p>Drag and drop or click to upload</p>
+            <input type="file" id="pdf-file-input" accept=".pdf" style="display: none;">
+            <div class="loaded-pdf-info" id="pdf-info" style="display: none;">
+              <i data-lucide="file-text"></i>
+              <span id="pdf-name">book.pdf</span>
+            </div>
+          </div>
+
+          <!-- Kindle settings -->
+          <div class="glass-section kindle-controls">
+            <h4>Reading Customizations</h4>
+            <div class="setting-group">
+              <label>Theme</label>
+              <div class="theme-buttons">
+                <button class="theme-select-btn active light-btn" data-theme="light-read">Aa</button>
+                <button class="theme-select-btn sepia-btn" data-theme="sepia-read">Aa</button>
+                <button class="theme-select-btn dark-btn" data-theme="dark-read">Aa</button>
+              </div>
+            </div>
+            <div class="setting-group">
+              <label>View Mode</label>
+              <div class="theme-buttons">
+                <button class="theme-select-btn active view-mode-btn" data-view="page">Original Page</button>
+                <button class="theme-select-btn view-mode-btn" data-view="text">Reflow Text</button>
+              </div>
+            </div>
+            <div class="setting-group">
+              <label>Font Family</label>
+              <select id="reader-font-family">
+                <option value="font-serif">Serif (Playfair)</option>
+                <option value="font-sans" selected>Sans-Serif (Inter)</option>
+                <option value="font-mono">Monospace (Outfit)</option>
+              </select>
+            </div>
+            <div class="setting-group">
+              <label>Font Size</label>
+              <div class="font-size-adjust">
+                <button id="font-dec">-</button>
+                <span id="font-size-val">16px</span>
+                <button id="font-inc">+</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Podcast Player widget -->
+          <div class="glass-section podcast-widget">
+            <div class="podcast-title-area">
+              <i data-lucide="headphones" class="pulse-icon"></i>
+              <div>
+                <h4>Podcast Player</h4>
+                <p id="podcast-status">TTS engine ready</p>
+              </div>
+            </div>
+            
+            <!-- Audio waves visualizer -->
+            <div class="audio-visualizer" id="podcast-visualizer">
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+            </div>
+
+            <!-- Speech Configs -->
+            <div class="setting-group">
+              <label>Narrator Voice</label>
+              <select id="podcast-voice-select">
+                <!-- Populated dynamically by SpeechSynthesis -->
+              </select>
+            </div>
+            <div class="setting-group">
+              <label>Speed: <span id="podcast-speed-val">1.0x</span></label>
+              <input type="range" id="podcast-speed" min="0.5" max="2" step="0.1" value="1.0">
+            </div>
+
+            <!-- Audio Controls -->
+            <div class="audio-controls">
+              <button class="control-btn" id="podcast-prev"><i data-lucide="skip-back"></i></button>
+              <button class="control-btn play-btn" id="podcast-play"><i data-lucide="play"></i></button>
+              <button class="control-btn" id="podcast-next"><i data-lucide="skip-forward"></i></button>
+            </div>
+            
+            <div class="podcast-progress">
+              <span id="podcast-current-page">Page 0</span>
+              <span>of</span>
+              <span id="podcast-total-pages">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kindle Text Reader Screen -->
+        <div class="pdf-viewer-pane font-sans" id="reader-pane">
+          <div class="reader-header">
+            <span id="reader-title">No PDF Loaded</span>
+            <div class="reader-header-actions">
+              <span id="reader-page-indicator">0 / 0</span>
+              <button id="reader-fullscreen-btn" class="header-action-btn" title="Toggle Fullscreen">
+                <i data-lucide="maximize-2"></i>
+              </button>
+            </div>
+          </div>
+          <div class="reader-scroller" id="reader-body">
+            <!-- PDF text rendered here -->
+            <div class="reader-empty-state">
+              <i data-lucide="book" class="empty-icon"></i>
+              <h3>Load a book to begin reading</h3>
+              <p>Drag and drop any PDF file in the sidebar to convert it to an immersive reading list and listenable audio on the fly.</p>
+            </div>
+          </div>
+          <div class="reader-footer-nav">
+            <button id="reader-prev-page" class="nav-arrow-btn"><i data-lucide="chevron-left"></i> Previous Page</button>
+            <button id="reader-next-page" class="nav-arrow-btn">Next Page <i data-lucide="chevron-right"></i></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Market Tracker -->
+    <section id="market-tab" class="tab-content">
+      <div class="market-workspace">
+        <div class="market-left">
+          <!-- Live prices cards -->
+          <div class="market-cards-row">
+            <div class="market-card-metric">
+              <span class="card-label">Nifty 50 Index</span>
+              <h2 id="market-nifty-price">₹---</h2>
+              <span id="market-nifty-change" class="trend-indicator">---</span>
+            </div>
+            <div class="market-card-metric">
+              <span class="card-label">Gold Price (Ounce USD)</span>
+              <h2 id="market-gold-price-usd">$---</h2>
+              <span id="market-gold-change-usd" class="trend-indicator">---</span>
+            </div>
+            <div class="market-card-metric">
+              <span class="card-label">USD to INR Rate</span>
+              <h2 id="market-usd-price">₹---</h2>
+              <span id="market-usd-change" class="trend-indicator">---</span>
+            </div>
+          </div>
+
+          <!-- Charts -->
+          <div class="glass-section chart-container">
+            <div class="chart-header">
+              <h4>Nifty 50 Trend Sparkline</h4>
+              <p>Visualizing closing prices for index over the past 30 days.</p>
+            </div>
+            <!-- Standard Inline SVG sparkline dynamically generated -->
+            <div class="svg-chart-wrapper" id="nifty-svg-chart-wrap">
+              <svg id="nifty-chart" viewBox="0 0 800 250" class="spark-chart">
+                <!-- SVG path plotted by JS -->
+              </svg>
+            </div>
+          </div>
+
+          <!-- Gold Weight Calculator -->
+          <div class="glass-section gold-calc-section">
+            <h4>Gold Weight & Jeweler Price Calculator</h4>
+            <p class="subtitle">Quickly calculate costs in India based on customized weights & karat choices.</p>
+            
+            <div class="gold-calc-grid">
+              <div class="calc-input">
+                <label>Weight (Grams)</label>
+                <input type="number" id="gold-calc-weight" value="10" min="0.1" step="0.1">
+              </div>
+              <div class="calc-input">
+                <label>Karat purity</label>
+                <select id="gold-calc-karat">
+                  <option value="24" selected>24K (Pure Gold)</option>
+                  <option value="22">22K (Standard Jewelry - 91.6%)</option>
+                  <option value="18">18K (Solid Jewelry - 75%)</option>
+                </select>
+              </div>
+              <div class="calc-input">
+                <label>Making Charges (%)</label>
+                <input type="number" id="gold-calc-making" value="5" min="0" max="30" step="0.5">
+              </div>
+              <div class="calc-result">
+                <span class="result-label">Total Jeweler Cost:</span>
+                <span class="result-val font-mono" id="gold-calc-result-price">₹0.00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="market-right">
+          <!-- Stock Time to invest advisory details -->
+          <div class="glass-section invest-advisory-section">
+            <h4>Stock Time to Invest Analysis</h4>
+            <p class="subtitle">Nifty 50 Technical Indicators Overview.</p>
+            
+            <div class="advisory-meter">
+              <div class="gauge-bar-labels">
+                <span>Oversold</span>
+                <span>Neutral</span>
+                <span>Overbought</span>
+              </div>
+              <div class="gauge-bar-full">
+                <div class="gauge-bar-indicator" id="advisory-gauge" style="left: 50%;"></div>
+              </div>
+              <div class="gauge-status-title" id="advisory-gauge-status">Neutral Accumulate</div>
+            </div>
+
+            <div class="advisory-list">
+              <div class="advisory-item">
+                <div class="adv-label">RSI (14 Days)</div>
+                <div class="adv-desc">Standard Relative Strength Index indicator. Under 30 is oversold (prime time to invest), above 70 is overbought.</div>
+                <div class="adv-badge font-mono" id="adv-rsi-val">50.0</div>
+              </div>
+              
+              <div class="advisory-item">
+                <div class="adv-label">SMA-20 Deviation</div>
+                <div class="adv-desc">Compares the current Nifty price with the 20-day Simple Moving Average. Positive means bullish trend, negative is dip.</div>
+              </div>
+
+              <div class="advisory-item">
+                <div class="adv-label">Monthly Range</div>
+                <div class="adv-desc">The 1-month low and high bounds for Nifty 50.</div>
+                <div class="adv-badge font-mono" id="adv-range-val">₹-- - ₹--</div>
+              </div>
+
+              <div class="advisory-item">
+                <div class="adv-label">Investment Strategy</div>
+                <div class="adv-desc">Automated strategy recommendation based on market triggers.</div>
+                <div class="adv-badge badge-full font-mono" id="adv-strategy-val">Dollar Cost Averaging (DCA)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gold Time to Invest / SIP Advisory -->
+          <div class="glass-section gold-advisory-section mt-4">
+            <div class="card-header-flex">
+              <h4>Gold SIP Investment Analysis</h4>
+              <a href="https://www.goodreturns.in/gold-rates/" target="_blank" class="verification-badge">
+                <i data-lucide="check-circle" class="badge-icon"></i>
+                <span>✓ Goodreturns Verified</span>
+              </a>
+            </div>
+            <p class="subtitle">Domestic Gold Monthly Range & SIP Recommendation.</p>
+            
+            <div class="advisory-meter">
+              <div class="gauge-bar-labels">
+                <span>Monthly Low</span>
+                <span>Average</span>
+                <span>Monthly High</span>
+              </div>
+              <div class="gauge-bar-full">
+                <div class="gauge-bar-indicator" id="gold-advisory-gauge" style="left: 50%;"></div>
+              </div>
+              <div class="gauge-status-title" id="gold-advisory-gauge-status">DCA Accumulate</div>
+            </div>
+
+            <div class="advisory-list">
+              <div class="advisory-item">
+                <div class="adv-label">Monthly Range (1g)</div>
+                <div class="adv-desc">The 1-month low and high bounds for 24K Gold in India.</div>
+                <div class="adv-badge font-mono" id="gold-adv-range-val">₹-- - ₹--</div>
+              </div>
+              
+              <div class="advisory-item">
+                <div class="adv-label">Current Position</div>
+                <div class="adv-desc">Percentile position of today's price relative to the 1-month range.</div>
+                <div class="adv-badge font-mono" id="gold-adv-pos-val">---</div>
+              </div>
+
+              <div class="advisory-item">
+                <div class="adv-label">Gold SIP Strategy</div>
+                <div class="adv-desc">Actionable advice for paying your monthly Gold accumulation SIP.</div>
+                <div class="adv-badge badge-full font-mono" id="gold-adv-strategy-val">DCA Accumulate</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: News Feed -->
+    <section id="news-tab" class="tab-content">
+      <div class="news-workspace">
+        <div class="news-header-actions">
+          <div>
+            <h2>Daily News Feed</h2>
+            <p>Catch up with what happened daily. Easy to read and summarize on the fly using AI.</p>
+          </div>
+          <button class="primary-btn" id="news-refresh-btn"><i data-lucide="refresh-cw"></i> Refresh Feed</button>
+        </div>
+
+        <!-- AI Daily Digest Summary -->
+        <div class="glass-section daily-digest-card" id="daily-digest-section">
+          <div class="digest-header">
+            <div class="digest-title-area">
+              <i data-lucide="sparkles" class="digest-icon"></i>
+              <div>
+                <h3>AI Daily Digest</h3>
+                <p class="subtitle">Auto-generated summary of today's top headlines, categorized by region.</p>
+              </div>
+            </div>
+            <div class="digest-meta">
+              <span class="font-mono text-small" id="digest-ai-cost">$0.0000</span>
+              <button class="text-btn" id="digest-regenerate-btn" title="Regenerate digest"><i data-lucide="refresh-cw"></i></button>
+            </div>
+          </div>
+
+          <div class="digest-loader" id="digest-loader">
+            <div class="loader"></div>
+            <p>Analyzing all headlines and generating your daily brief...</p>
+          </div>
+
+          <div class="digest-content" id="digest-content" style="display: none;">
+            <div class="digest-category" id="digest-india">
+              <h4><span class="digest-flag">🇮🇳</span> India</h4>
+              <div class="digest-text" id="digest-india-text"></div>
+            </div>
+            <div class="digest-category" id="digest-world">
+              <h4><span class="digest-flag">🌍</span> World &amp; Other</h4>
+              <div class="digest-text" id="digest-world-text"></div>
+            </div>
+          </div>
+
+          <div class="digest-no-key" id="digest-no-key" style="display: none;">
+            <p>Configure an API key in <strong>Settings</strong> to enable AI digest.</p>
+          </div>
+        </div>
+        
+        <div class="news-container" id="news-feed-list">
+          <!-- News cards rendered dynamically by JS -->
+          <div class="news-skeleton"></div>
+          <div class="news-skeleton"></div>
+          <div class="news-skeleton"></div>
+        </div>
+      </div>
+      
+      <!-- News AI Summary Drawer -->
+      <div class="summary-drawer" id="news-summary-drawer" style="display: none;">
+        <div class="drawer-header">
+          <h4 id="summary-article-title">Article Title</h4>
+          <button id="summary-drawer-close" class="close-btn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="drawer-body">
+          <div class="article-source-meta">
+            <span id="summary-article-source" class="badge bg-neutral">Source</span>
+            <span id="summary-article-date">Date</span>
+          </div>
+          
+          <div class="summary-ai-section">
+            <div class="summary-ai-header">
+              <span><i data-lucide="sparkles"></i> AI Summary Brief (TL;DR)</span>
+              <span class="font-mono text-small" id="summary-ai-cost">$0.0000</span>
+            </div>
+            
+            <div class="summary-loader" id="summary-ai-loader" style="display: none;">
+              <div class="loader"></div>
+              <p>Analyzing news and writing brief...</p>
+            </div>
+            
+            <div class="summary-ai-content font-serif" id="summary-ai-text-content">
+              Select an article and click Summarize to view AI breakdown.
+            </div>
+          </div>
+          
+          <a href="#" target="_blank" id="summary-original-link" class="outline-btn mt-3">Read Full Original Article <i data-lucide="external-link"></i></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 5: AI Chat Console -->
+    <section id="chat-tab" class="tab-content">
+      <div class="chat-workspace">
+        
+        <!-- Left Panel: Chat Interface -->
+        <div class="chat-interface-panel">
+          <div class="chat-header-bar">
+            <div class="chat-meta-left">
+              <i data-lucide="bot"></i>
+              <div>
+                <h4 id="active-model-name-label">Gemini 3.5 Flash</h4>
+                <p id="active-provider-label">Google AI Free Tier</p>
+                <div id="chat-live-rate-limit" style="font-size: 0.72rem; color: var(--accent-gold); margin-top: 3px; font-weight: 500; font-family: var(--font-display);">
+                  Limits: 0/5 RPM | 0/250k TPM
+                </div>
+              </div>
+            </div>
+            <div class="chat-config-quick">
+              <label>Model Selector</label>
+              <select id="chat-model-selector">
+                <optgroup label="Google AI (Free Tier)">
+                  <option value="gemini-3.5-flash" selected>Gemini 3.5 Flash (5 RPM / 250k TPM)</option>
+                  <option value="gemini-3-flash">Gemini 3 Flash (5 RPM / 250k TPM)</option>
+                  <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (15 RPM / 250k TPM)</option>
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (5 RPM / 250k TPM)</option>
+                  <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (10 RPM / 250k TPM)</option>
+                  <option value="gemma-4-26b-a4b-it">Gemma 4 26B (15 RPM / Unlimited TPM)</option>
+                  <option value="gemma-4-31b-it">Gemma 4 31B (15 RPM / Unlimited TPM)</option>
+                </optgroup>
+                <optgroup label="Nvidia NIM">
+                  <option value="nvidia/llama-3.1-nemotron-70b-instruct">Llama 3.1 Nemotron 70B</option>
+                  <option value="meta/llama-3.3-70b-instruct">Llama 3.3 70B</option>
+                  <option value="mistralai/mixtral-8x22b-v0.1">Mixtral 8x22B</option>
+                  <option value="openai/gpt-oss-120b">GPT-OSS 120B</option>
+                </optgroup>
+              </select>
+            </div>
+          </div>
+
+          <!-- Chat messages area -->
+          <div class="chat-history-scroller" id="chat-history">
+            <div class="chat-msg system">
+              <div class="msg-sender">System</div>
+              <div class="msg-bubble">
+                Welcome to the developer playground console. This sandbox allows you to inspect the raw JSON requests and responses sent to Google and Nvidia APIs in real time. Please configure your API keys in the <strong>Settings</strong> tab to begin.
+              </div>
+            </div>
+          </div>
+
+          <!-- Input area -->
+          <div class="chat-input-bar">
+            <textarea id="chat-textarea" placeholder="Type a message to chat..." rows="1"></textarea>
+            <button class="chat-send-btn" id="chat-send-btn"><i data-lucide="send"></i></button>
+          </div>
+        </div>
+
+        <!-- Right Panel: Developer Payload Inspector -->
+        <div class="chat-inspector-panel">
+          <div class="inspector-header">
+            <h4>Raw API Inspector</h4>
+            <div class="inspector-badge">
+              <span id="inspect-latency">0 ms</span>
+              <span class="sep">|</span>
+              <span id="inspect-cost">$0.00000</span>
+            </div>
+          </div>
+          
+          <div class="inspector-tabs">
+            <button class="inspect-tab-btn active" data-inspect-tab="inspect-req">HTTP Request</button>
+            <button class="inspect-tab-btn" data-inspect-tab="inspect-res">HTTP Response</button>
+          </div>
+
+          <div class="inspector-body">
+            <!-- Request Pane -->
+            <div id="inspect-req" class="inspect-tab-content active">
+              <div class="meta-info">
+                <div>Method: <span class="badge badge-post">POST</span></div>
+                <div class="text-truncate">URL: <span id="inspect-req-url" class="font-mono text-small">None</span></div>
+              </div>
+              <pre class="code-block" id="inspect-req-body">{}</pre>
+            </div>
+
+            <!-- Response Pane -->
+            <div id="inspect-res" class="inspect-tab-content">
+              <div class="meta-info">
+                <div>Status: <span id="inspect-res-status" class="badge">None</span></div>
+                <div>Tokens: <span id="inspect-res-tokens" class="font-mono">In: 0 | Out: 0</span></div>
+              </div>
+              <pre class="code-block" id="inspect-res-body">{}</pre>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Tab 6: Settings -->
+    <section id="settings-tab" class="tab-content">
+      <div class="settings-container">
+        <h2>System Settings & Telemetry</h2>
+        <p class="subtitle font-sans">Manage API credentials, configure default costs, and monitor free-tier token usage.</p>
+        
+        <div class="settings-sections-grid">
+          <!-- Credentials -->
+          <div class="glass-section">
+            <h3><i data-lucide="key"></i> API Credentials</h3>
+            <p class="subtitle">Keys are saved locally inside your browser and are never sent to external servers other than directly to the Google & Nvidia proxies.</p>
+            
+            <div class="form-group">
+              <label>Google Gemini API Key</label>
+              <input type="password" id="key-google" placeholder="AIzaSy...">
+              <p class="form-help">Generate a key in <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a>.</p>
+            </div>
+            
+            <div class="form-group">
+              <label>Nvidia NIM API Key</label>
+              <input type="password" id="key-nvidia" placeholder="nvapi-...">
+              <p class="form-help" id="nvidia-help-local">Generate a key in the <a href="https://build.nvidia.com/" target="_blank">Nvidia Build Portal</a>.</p>
+            </div>
+
+            <div class="form-group">
+              <label>Preferred News Summarizer Provider</label>
+              <select id="news-summary-provider-select">
+                <option value="auto">Auto-detect (Based on active keys)</option>
+                <option value="google">Google Gemini</option>
+                <option value="nvidia">Nvidia NIM</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Default AI Model</label>
+              <select id="settings-default-model-select">
+                <optgroup label="Google AI (Free Tier)">
+                  <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                  <option value="gemini-3-flash">Gemini 3 Flash</option>
+                  <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+                  <option value="gemma-4-26b-a4b-it">Gemma 4 26B</option>
+                  <option value="gemma-4-31b-it" selected>Gemma 4 31B</option>
+                </optgroup>
+                <optgroup label="Nvidia NIM">
+                  <option value="nvidia/llama-3.1-nemotron-70b-instruct">Llama 3.1 Nemotron 70B</option>
+                  <option value="meta/llama-3.3-70b-instruct">Llama 3.3 70B</option>
+                  <option value="mistralai/mixtral-8x22b-v0.1">Mixtral 8x22B</option>
+                  <option value="openai/gpt-oss-120b">GPT-OSS 120B</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <button class="primary-btn" id="save-settings-btn"><i data-lucide="save"></i> Save Settings</button>
+            <span class="save-status-msg" id="save-settings-status"></span>
+          </div>
+
+          <!-- Token usage monitor -->
+          <div class="glass-section token-cost-monitor">
+            <h3><i data-lucide="bar-chart-3"></i> Budget & Cost Tracking</h3>
+            <p class="subtitle font-sans">Visual monitoring of model switching costs (estimates based on pricing tiers).</p>
+            
+            <div class="cost-summary-bar">
+              <div class="cost-meter">
+                <div class="cost-fill" id="budget-progress-bar" style="width: 0%;"></div>
+              </div>
+              <div class="cost-labels font-mono">
+                <span id="settings-total-cost">$0.00000 used</span>
+                <span id="settings-budget-limit">Budget: $1.00000</span>
+              </div>
+            </div>
+
+            <div class="token-stats-grid">
+              <div class="t-stat">
+                <span class="t-val font-mono" id="tokens-google-in">0</span>
+                <span class="t-lbl">Google Input Tokens</span>
+              </div>
+              <div class="t-stat">
+                <span class="t-val font-mono" id="tokens-google-out">0</span>
+                <span class="t-lbl">Google Output Tokens</span>
+              </div>
+              <div class="t-stat">
+                <span class="t-val font-mono" id="tokens-nvidia-in">0</span>
+                <span class="t-lbl">Nvidia Input Tokens</span>
+              </div>
+              <div class="t-stat">
+                <span class="t-val font-mono" id="tokens-nvidia-out">0</span>
+                <span class="t-lbl">Nvidia Output Tokens</span>
+              </div>
+            </div>
+
+            <div class="danger-row mt-3 pt-3 border-t">
+              <button class="danger-btn outline-btn" id="reset-cost-btn"><i data-lucide="trash-2"></i> Reset Usage Data</button>
+            </div>
+          </div>
+
+          <!-- Model pricing lists -->
+          <div class="glass-section col-span-2">
+            <h3><i data-lucide="info"></i> Token Pricing Reference</h3>
+            <p class="subtitle font-sans">Used to calculate costs displayed in real time.</p>
+            <div class="table-wrapper">
+              <table class="pricing-table">
+                <thead>
+                  <tr>
+                    <th>Provider</th>
+                    <th>Model</th>
+                    <th>Input Cost (per 1M)</th>
+                    <th>Output Cost (per 1M)</th>
+                    <th>Rate Limits (RPM / TPM / RPD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Google AI</td>
+                    <td>gemini-3.5-flash</td>
+                    <td>$0.075</td>
+                    <td>$0.30</td>
+                    <td>5 RPM / 250k TPM / 20 RPD</td>
+                  </tr>
+                  <tr>
+                    <td>Google AI</td>
+                    <td>gemini-3-flash</td>
+                    <td>$0.075</td>
+                    <td>$0.30</td>
+                    <td>5 RPM / 250k TPM / 20 RPD</td>
+                  </tr>
+                  <tr>
+                    <td>Google AI</td>
+                    <td>gemini-3.1-flash-lite</td>
+                    <td>$0.030</td>
+                    <td>$0.12</td>
+                    <td>15 RPM / 250k TPM / 500 RPD</td>
+                  </tr>
+                  <tr>
+                    <td>Google AI</td>
+                    <td>gemini-2.5-flash</td>
+                    <td>$0.075</td>
+                    <td>$0.30</td>
+                    <td>5 RPM / 250k TPM / 20 RPD</td>
+                  </tr>
+                  <tr>
+                    <td>Google AI</td>
+                    <td>gemini-2.5-flash-lite</td>
+                    <td>$0.030</td>
+                    <td>$0.12</td>
+                    <td>10 RPM / 250k TPM / 20 RPD</td>
+                  </tr>
+                  <tr>
+                    <td>Google AI</td>
+                    <td>gemma-4-26b-a4b-it</td>
+                    <td>$0.020</td>
+                    <td>$0.08</td>
+                    <td>15 RPM / Unlimited / 1.5k RPD</td>
+                  </tr>
+                  <tr>
+                    <td>Google AI</td>
+                    <td>gemma-4-31b-it</td>
+                    <td>$0.020</td>
+                    <td>$0.08</td>
+                    <td>15 RPM / Unlimited / 1.5k RPD</td>
+                  </tr>
+                  <tr>
+                    <td>Nvidia NIM</td>
+                    <td>llama-3.1-nemotron-70b-instruct</td>
+                    <td>$0.07 (est)</td>
+                    <td>$0.28 (est)</td>
+                    <td>Standard Server Limits</td>
+                  </tr>
+                  <tr>
+                    <td>Nvidia NIM</td>
+                    <td>nemotron-4-340b-instruct</td>
+                    <td>$0.15 (est)</td>
+                    <td>$0.60 (est)</td>
+                    <td>Standard Server Limits</td>
+                  </tr>
+                  <tr>
+                    <td>Nvidia NIM</td>
+                    <td>meta/llama-3.3-70b-instruct</td>
+                    <td>$0.07 (est)</td>
+                    <td>$0.28 (est)</td>
+                    <td>Standard Server Limits</td>
+                  </tr>
+                  <tr>
+                    <td>Nvidia NIM</td>
+                    <td>mistralai/mixtral-8x22b-v0.1</td>
+                    <td>$0.60 (est)</td>
+                    <td>$0.60 (est)</td>
+                    <td>Standard Server Limits</td>
+                  </tr>
+                  <tr>
+                    <td>Nvidia NIM</td>
+                    <td>openai/gpt-oss-120b</td>
+                    <td>$0.07 (est)</td>
+                    <td>$0.28 (est)</td>
+                    <td>Standard Server Limits</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Lucide Icons Library -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Main application scripts (ES Modules) -->
+  <script type="module" src="js/app.js"></script>
+
+</body>
+</html>

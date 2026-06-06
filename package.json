@@ -1,0 +1,10 @@
+{
+  "name": "antigravity-dashboard",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Minimalist AI & Market Dashboard for Vercel",
+  "scripts": {
+    "dev": "node server.js"
+  },
+  "dependencies": {}
+}
