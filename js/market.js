@@ -247,6 +247,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Run gold calculations initially
     calculateGoldPrice();
+    // Record current rate and render tracking panel
+    trackAndRenderGold(goldRate24kPerGram);
   }
 
   // 3. Draw Inline SVG Sparkline Chart
@@ -339,7 +341,138 @@ document.addEventListener('DOMContentLoaded', () => {
     svg.innerHTML = svgContent;
   }
 
-  // 4. Gold rate weight calculator
+  // 4. Gold Tracker & Yearly Comparison Logic
+  function trackAndRenderGold(currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return;
+
+    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+    const currentMonthStr = todayStr.substring(0, 7); // YYYY-MM
+
+    let trackerState = {
+      current_month: {
+        month: currentMonthStr,
+        daily_prices: {}
+      },
+      monthly_averages: {}
+    };
+
+    const stored = localStorage.getItem('gold_tracker_state');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.current_month && parsed.monthly_averages) {
+          trackerState = parsed;
+        }
+      } catch (e) {
+        console.error("Error parsing gold tracker state:", e);
+      }
+    }
+
+    // Rollover Check: if stored month is different, average its daily prices and clear
+    if (trackerState.current_month.month !== currentMonthStr) {
+      const prevMonth = trackerState.current_month.month;
+      const dailyPrices = Object.values(trackerState.current_month.daily_prices || {});
+      
+      if (dailyPrices.length > 0) {
+        const sum = dailyPrices.reduce((a, b) => a + b, 0);
+        const avg = Math.round((sum / dailyPrices.length) * 100) / 100;
+        trackerState.monthly_averages[prevMonth] = avg;
+      }
+
+      trackerState.current_month = {
+        month: currentMonthStr,
+        daily_prices: {}
+      };
+    }
+
+    // Save today's price (1g 24K INR)
+    trackerState.current_month.daily_prices[todayStr] = Math.round(currentPrice * 100) / 100;
+    localStorage.setItem('gold_tracker_state', JSON.stringify(trackerState));
+
+    // Lowest of Month Check: compare today against all previous days in the current month
+    let isLowest = false;
+    const dailyEntries = Object.entries(trackerState.current_month.daily_prices);
+    if (dailyEntries.length > 1) {
+      const otherPrices = dailyEntries
+        .filter(([date]) => date !== todayStr)
+        .map(([, p]) => p);
+      
+      if (otherPrices.length > 0) {
+        const minOther = Math.min(...otherPrices);
+        if (currentPrice < minOther) {
+          isLowest = true;
+        }
+      }
+    }
+
+    // Alert badges
+    const mLowBadge = document.getElementById('gold-monthly-low-badge');
+    const buySignalBadge = document.getElementById('gold-tracker-buy-signal');
+
+    if (isLowest) {
+      if (mLowBadge) mLowBadge.classList.remove('hidden');
+      if (buySignalBadge) buySignalBadge.classList.remove('hidden');
+    } else {
+      if (mLowBadge) mLowBadge.classList.add('hidden');
+      if (buySignalBadge) buySignalBadge.classList.add('hidden');
+    }
+
+    // Render Daily Log
+    const dailyTbody = document.getElementById('gold-daily-tbody');
+    if (dailyTbody) {
+      const sortedDaily = Object.entries(trackerState.current_month.daily_prices)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .slice(0, 31);
+
+      if (sortedDaily.length > 0) {
+        dailyTbody.innerHTML = sortedDaily.map(([date, p]) => {
+          const isToday = date === todayStr;
+          let statusText = isToday ? '<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: none; padding: 2px 6px;">Today</span>' : '<span class="text-muted">Recorded</span>';
+          if (isToday && isLowest) {
+            statusText = '<span class="badge" style="background: var(--accent-green-glow); color: var(--accent-green); border: none; padding: 2px 6px;">Lowest 📉</span>';
+          }
+          return `
+            <tr>
+              <td class="font-mono">${date}</td>
+              <td class="font-mono">₹${p.toFixed(2)}</td>
+              <td>${statusText}</td>
+            </tr>
+          `;
+        }).join('');
+      } else {
+        dailyTbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">No daily data recorded.</td></tr>`;
+      }
+    }
+
+    // Render Yearly Compare
+    const yearlyTbody = document.getElementById('gold-yearly-tbody');
+    if (yearlyTbody) {
+      const averagesList = Object.entries(trackerState.monthly_averages)
+        .sort((a, b) => b[0].localeCompare(a[0]));
+
+      if (averagesList.length > 0) {
+        yearlyTbody.innerHTML = averagesList.map(([month, avg]) => {
+          const diff = currentPrice - avg;
+          const diffPct = (diff / avg) * 100;
+          const isHigher = diff >= 0;
+          const diffText = `${isHigher ? '+' : ''}${diffPct.toFixed(1)}%`;
+          const diffClass = isHigher ? 'price-up' : 'price-down';
+
+          return `
+            <tr>
+              <td class="font-mono">${month}</td>
+              <td class="font-mono">₹${avg.toFixed(2)}</td>
+              <td class="font-mono ${diffClass}">${diffText}</td>
+            </tr>
+          `;
+        }).join('');
+      } else {
+        yearlyTbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">No historical averages archived yet.</td></tr>`;
+      }
+    }
+  }
+
+  // 5. Gold rate weight calculator
   function calculateGoldPrice() {
     if (goldRate24kPerGram <= 0) return;
 

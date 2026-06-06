@@ -339,9 +339,12 @@
               <h2 id="market-nifty-price">₹---</h2>
               <span id="market-nifty-change" class="trend-indicator">---</span>
             </div>
-            <div class="market-card-metric">
+            <div class="market-card-metric relative">
               <span class="card-label">Gold Price (Ounce USD)</span>
-              <h2 id="market-gold-price-usd">$---</h2>
+              <div style="display: flex; align-items: baseline; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                <h2 id="market-gold-price-usd">$---</h2>
+                <span id="gold-monthly-low-badge" class="gold-alert-badge hidden">📉 Monthly Low!</span>
+              </div>
               <span id="market-gold-change-usd" class="trend-indicator">---</span>
             </div>
             <div class="market-card-metric">
@@ -390,6 +393,59 @@
               <div class="calc-result">
                 <span class="result-label">Total Jeweler Cost:</span>
                 <span class="result-val font-mono" id="gold-calc-result-price">₹0.00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gold Tracker & Yearly Comparison -->
+          <div class="glass-section gold-tracker-section">
+            <div class="card-header-flex">
+              <h4>Gold Price Tracker & History</h4>
+              <span id="gold-tracker-buy-signal" class="badge font-mono hidden" style="background: var(--accent-green-glow); color: var(--accent-green); border: 1px solid rgba(34, 197, 94, 0.2);">📉 Buy Signal (Monthly Low)</span>
+            </div>
+            <p class="subtitle">Tracks daily gold price trends for the current month and archives previous months' averages for yearly comparisons.</p>
+            
+            <div class="gold-tracker-container">
+              <!-- Current Month Daily Log -->
+              <div class="tracker-column">
+                <h5>Daily Log (Current Month)</h5>
+                <div class="table-scroll-container">
+                  <table class="gold-history-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Price (24K 1g)</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="gold-daily-tbody">
+                      <tr>
+                        <td colspan="3" class="text-center text-muted">No daily data recorded yet for this month.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <!-- Yearly Comparison (Monthly Averages) -->
+              <div class="tracker-column">
+                <h5>Monthly Averages (Yearly Compare)</h5>
+                <div class="table-scroll-container">
+                  <table class="gold-history-table">
+                    <thead>
+                      <tr>
+                        <th>Month</th>
+                        <th>Avg Price (24K 1g)</th>
+                        <th>vs Current</th>
+                      </tr>
+                    </thead>
+                    <tbody id="gold-yearly-tbody">
+                      <tr>
+                        <td colspan="3" class="text-center text-muted">No historical averages archived yet.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>

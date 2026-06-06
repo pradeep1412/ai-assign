@@ -2498,3 +2498,103 @@ input:focus, select:focus, textarea:focus {
   flex: 1;
   overflow-y: auto;
 }
+
+/* ==========================================================================
+   Gold Tracker & Yearly Comparison Styles
+   ========================================================================== */
+
+.gold-tracker-section {
+  margin-top: 24px;
+}
+
+.gold-tracker-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 16px;
+}
+
+.tracker-column {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.tracker-column h5 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-heading);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.gold-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.gold-history-table th, 
+.gold-history-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gold-history-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gold-history-table td {
+  color: var(--text-heading);
+}
+
+.gold-history-table tr:last-child td {
+  border-bottom: none;
+}
+
+.gold-history-table tr:hover td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* Gold Alert Badge & Animation */
+.gold-alert-badge {
+  background: var(--accent-green-glow);
+  color: var(--accent-green);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-block;
+  vertical-align: middle;
+  animation: goldPulse 2s infinite;
+}
+
+@keyframes goldPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+/* Responsive grid for tracker */
+@media (max-width: 768px) {
+  .gold-tracker-container {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
