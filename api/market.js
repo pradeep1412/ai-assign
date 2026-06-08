@@ -28,10 +28,9 @@ function calculateRSI(prices, period = 14) {
 let cache = {
   nifty50: null,
   niftyTime: 0,
-  gold: null,
-  goldTime: 0,
   usdInr: null,
-  usdInrTime: 0
+  usdInrTime: 0,
+  gold: {} // Keyed by city name: { data, time }
 };
 
 export default async function handler(req, res) {
@@ -43,6 +42,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  const city = req.query.city || 'bangalore';
+  const validCities = ['bangalore', 'mumbai', 'delhi', 'chennai', 'kolkata', 'hyderabad'];
+  const activeCity = validCities.includes(city) ? city : 'bangalore';
 
   const data = {
     nifty50: {
@@ -68,7 +71,8 @@ export default async function handler(req, res) {
       monthlyMin: 0.0,
       monthlyMax: 0.0,
       percentile: 50.0,
-      sipRecommendation: "Accumulate (DCA)"
+      sipRecommendation: "Accumulate (DCA)",
+      historical: [] // Historical daily prices for charting
     },
     usdInr: {
       rate: 0.0,
@@ -129,8 +133,8 @@ export default async function handler(req, res) {
           if (Math.abs(prices[prices.length - 1] - currentPrice) > 0.01) {
             prices.push(currentPrice);
           }
-          // Store last 10 points for sparkline visualizer
-          data.nifty50.historical = prices.slice(-10).map(p => Math.round(p * 100) / 100);
+          // Store last 30 points for sparkline visualizer
+          data.nifty50.historical = prices.slice(-30).map(p => Math.round(p * 100) / 100);
 
           // Indicators calculations
           const rsi = calculateRSI(prices, 14);
@@ -195,10 +199,7 @@ export default async function handler(req, res) {
           data.nifty50.changePercent = Math.round(changePct * 100) / 100;
 
           const base = currentPrice;
-          data.nifty50.historical = [
-            base - 200, base - 150, base - 100, base - 120, base - 50,
-            base - 80, base - 30, base - 10, base + 20, base
-          ].map(p => Math.round(p * 100) / 100);
+          data.nifty50.historical = Array.from({length: 30}, (_, i) => Math.round((base - 300 + i * 10.5 + Math.sin(i) * 30) * 100) / 100);
 
           data.nifty50.rsi = 48.5; // Neutral
           data.nifty50.sma20 = Math.round((currentPrice - 50) * 100) / 100;
@@ -216,7 +217,7 @@ export default async function handler(req, res) {
         data.nifty50.change = -49.85;
         data.nifty50.changePercent = -0.21;
         data.nifty50.recommendation = "Accumulate (DCA - Fallback)";
-        data.nifty50.historical = [23100, 23150, 23200, 23120, 23300, 23250, 23280, 23310, 23330, 23366.70];
+        data.nifty50.historical = Array.from({length: 30}, (_, i) => Math.round((23100 + i * 9.2 + Math.sin(i) * 25) * 100) / 100);
         data.nifty50.rsi = 51.5;
         data.nifty50.sma20 = 23250.00;
         data.nifty50.monthlyMin = 23100.00;
@@ -230,8 +231,9 @@ export default async function handler(req, res) {
   }
 
   // 3. Fetch Gold rates (USD International spot & INR Domestic retail)
-  if (cache.gold && (now - cache.goldTime < 30 * 60 * 1000)) {
-    data.gold = cache.gold;
+  const cityCache = cache.gold[activeCity];
+  if (cityCache && (now - cityCache.time < 30 * 60 * 1000)) {
+    data.gold = cityCache.data;
   } else {
     let currentGoldUSD = 4328.00;
     let changePct = 0.12;
@@ -287,7 +289,7 @@ export default async function handler(req, res) {
     let price22k = 0.0;
 
     try {
-      const grResponse = await fetch('https://www.goodreturns.in/gold-rates/bangalore.html', {
+      const grResponse = await fetch(`https://www.goodreturns.in/gold-rates/${activeCity}.html`, {
         headers: { 'User-Agent': userAgent },
         signal: AbortSignal.timeout(6000)
       });
@@ -362,14 +364,22 @@ export default async function handler(req, res) {
       } else {
         data.gold.sipRecommendation = "🔴 Price is High (Wait for Dip / Small DCA)";
       }
+      
+      data.gold.historical = goldHistoryInr1g.slice(-30).map(p => Math.round(p * 100) / 100);
     } else {
       data.gold.monthlyMin = Math.round(price24k_1g * 0.98 * 100) / 100;
       data.gold.monthlyMax = Math.round(price24k_1g * 1.02 * 100) / 100;
       data.gold.percentile = 50.0;
       data.gold.sipRecommendation = "🟡 Average Price (DCA - Fallback Estimate)";
+      
+      const base = price24k_1g;
+      data.gold.historical = Array.from({length: 30}, (_, i) => Math.round((base - 20 + i * 0.2 + Math.sin(i) * 1) * 100) / 100);
     }
-    cache.gold = data.gold;
-    cache.goldTime = now;
+    
+    cache.gold[activeCity] = {
+      data: data.gold,
+      time: now
+    };
   }
 
   return res.status(200).json(data);

@@ -340,13 +340,23 @@
               <span id="market-nifty-change" class="trend-indicator">---</span>
             </div>
             <div class="market-card-metric relative">
-              <span class="card-label">Gold Price (Ounce USD)</span>
+              <div class="card-header-flex" style="justify-content: space-between; align-items: center; width: 100%;">
+                <span class="card-label">Gold Price (Ounce USD)</span>
+                <select id="gold-city-select" class="gold-city-dropdown font-mono" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--accent-gold); border-radius: 4px; padding: 2px 4px; font-size: 0.72rem; outline: none; cursor: pointer;">
+                  <option value="bangalore" selected>Bengaluru</option>
+                  <option value="mumbai">Mumbai</option>
+                  <option value="delhi">Delhi</option>
+                  <option value="chennai">Chennai</option>
+                  <option value="kolkata">Kolkata</option>
+                  <option value="hyderabad">Hyderabad</option>
+                </select>
+              </div>
               <div class="gold-price-row">
                 <h2 id="market-gold-price-usd">$---</h2>
                 <span id="gold-monthly-low-badge" class="gold-alert-badge hidden">📉 Monthly Low!</span>
               </div>
               <div class="gold-india-row">
-                <span>🇮🇳 India (24K 1g):</span>
+                <span id="gold-city-label">🇮🇳 Bengaluru (24K 1g):</span>
                 <span id="market-gold-price-inr" class="price-inr">₹---</span>
               </div>
               <span id="market-gold-change-usd" class="trend-indicator">---</span>
@@ -359,44 +369,104 @@
           </div>
 
           <!-- Charts -->
-          <div class="glass-section chart-container">
-            <div class="chart-header">
-              <h4>Nifty 50 Trend Sparkline</h4>
-              <p>Visualizing closing prices for index over the past 30 days.</p>
+          <div class="glass-section chart-container relative">
+            <div class="chart-header card-header-flex" style="justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h4 id="chart-main-title">Nifty 50 Trend Sparkline</h4>
+                <p id="chart-sub-title" class="subtitle">Visualizing closing prices for index over the past 30 days.</p>
+              </div>
+              <div class="chart-toggles" style="display: flex; gap: 6px;">
+                <button class="badge font-mono active" id="chart-btn-nifty" style="cursor: pointer; border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 4px; font-size: 0.72rem; transition: all 0.2s;">Nifty 50</button>
+                <button class="badge font-mono" id="chart-btn-gold" style="cursor: pointer; border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 4px; font-size: 0.72rem; transition: all 0.2s;">Gold 24K</button>
+              </div>
             </div>
             <!-- Standard Inline SVG sparkline dynamically generated -->
-            <div class="svg-chart-wrapper" id="nifty-svg-chart-wrap">
+            <div class="svg-chart-wrapper relative" id="nifty-svg-chart-wrap" style="position: relative; cursor: crosshair;">
               <svg id="nifty-chart" viewBox="0 0 800 250" class="spark-chart">
                 <!-- SVG path plotted by JS -->
               </svg>
+              <!-- Tooltip & Crosshair overlay elements -->
+              <div id="chart-crosshair" class="chart-crosshair hidden" style="position: absolute; top: 30px; bottom: 40px; width: 1px; background: rgba(255,255,255,0.25); pointer-events: none;"></div>
+              <div id="chart-tooltip" class="chart-tooltip hidden" style="position: absolute; background: rgba(13,17,23,0.9); border: 1px solid var(--accent-cyan); border-radius: 6px; padding: 6px 10px; font-size: 0.75rem; pointer-events: none; z-index: 10; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+                <div class="tooltip-date font-mono text-muted" style="font-size: 0.65rem; margin-bottom: 2px;">2026-06-08</div>
+                <div class="tooltip-value font-mono" style="font-weight: 600; color: var(--accent-cyan);">₹23,123.00</div>
+              </div>
             </div>
           </div>
 
-          <!-- Gold Weight Calculator -->
-          <div class="glass-section gold-calc-section">
-            <h4>Gold Weight & Jeweler Price Calculator</h4>
-            <p class="subtitle">Quickly calculate costs in India based on customized weights & karat choices.</p>
+          </div>
+
+          <!-- Personal Portfolio Tracker & SIP Simulator -->
+          <div class="glass-section portfolio-section">
+            <h4>Personal Portfolio Tracker & SIP Simulator</h4>
+            <p class="subtitle">Log your Gold and Nifty mutual fund holdings to calculate live profit/loss and simulate a 10-year growth projection.</p>
             
-            <div class="gold-calc-grid">
-              <div class="calc-input">
-                <label>Weight (Grams)</label>
-                <input type="number" id="gold-calc-weight" value="10" min="0.1" step="0.1">
+            <div class="portfolio-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
+              <!-- Inputs Column -->
+              <div class="portfolio-inputs" style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="calc-input" style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.75rem; color: var(--text-muted);">Asset Class</label>
+                  <select id="port-asset" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; outline: none; cursor: pointer; width: 100%;">
+                    <option value="nifty" selected>Nifty 50 Index Fund</option>
+                    <option value="gold">Gold 24K (1g)</option>
+                  </select>
+                </div>
+                <div class="calc-input" style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.75rem; color: var(--text-muted);">Investment Type</label>
+                  <select id="port-type" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; outline: none; cursor: pointer; width: 100%;">
+                    <option value="lumpsum" selected>One-time Lumpsum</option>
+                    <option value="sip">Monthly SIP</option>
+                  </select>
+                </div>
+                <div class="calc-input" style="display: flex; flex-direction: column; gap: 4px;">
+                  <label id="port-amount-label" style="font-size: 0.75rem; color: var(--text-muted);">Average Buy Price (₹)</label>
+                  <input type="number" id="port-amount" value="22500" min="1" step="1" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; outline: none; width: 100%;">
+                </div>
+                <div class="calc-input" style="display: flex; flex-direction: column; gap: 4px;">
+                  <label id="port-qty-label" style="font-size: 0.75rem; color: var(--text-muted);">Quantity (Units)</label>
+                  <input type="number" id="port-qty" value="10" min="0.01" step="0.01" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; outline: none; width: 100%;">
+                </div>
+                <div class="calc-input" style="display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.75rem; color: var(--text-muted);">Expected CAGR Growth (%)</label>
+                  <input type="number" id="port-cagr" value="12" min="1" max="40" step="0.5" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; outline: none; width: 100%;">
+                </div>
               </div>
-              <div class="calc-input">
-                <label>Karat purity</label>
-                <select id="gold-calc-karat">
-                  <option value="24" selected>24K (Pure Gold)</option>
-                  <option value="22">22K (Standard Jewelry - 91.6%)</option>
-                  <option value="18">18K (Solid Jewelry - 75%)</option>
-                </select>
+
+              <!-- Live Outputs Column -->
+              <div class="portfolio-outputs" style="display: flex; flex-direction: column; gap: 15px; justify-content: center;">
+                <div class="output-card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 12px 15px; border-radius: 8px;">
+                  <span class="out-label" style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">Total Invested</span>
+                  <h3 id="port-out-invested" class="font-mono" style="margin: 0; color: var(--text-main);">₹2,25,000.00</h3>
+                </div>
+                <div class="output-card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 12px 15px; border-radius: 8px;">
+                  <span class="out-label" style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">Current Valuation</span>
+                  <h3 id="port-out-current" class="font-mono" style="margin: 0; color: var(--text-main);">₹2,31,230.00</h3>
+                </div>
+                <div class="output-card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 12px 15px; border-radius: 8px;">
+                  <span class="out-label" style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">Net Profit / Loss</span>
+                  <h3 id="port-out-pnl" class="font-mono" style="margin: 0;">+₹6,230.00 (+2.77%)</h3>
+                </div>
               </div>
-              <div class="calc-input">
-                <label>Making Charges (%)</label>
-                <input type="number" id="gold-calc-making" value="5" min="0" max="30" step="0.5">
-              </div>
-              <div class="calc-result">
-                <span class="result-label">Total Jeweler Cost:</span>
-                <span class="result-val font-mono" id="gold-calc-result-price">₹0.00</span>
+            </div>
+
+            <!-- Projections Simulator Panel -->
+            <div class="portfolio-projections mt-4" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-top: 20px;">
+              <h5 style="margin: 0 0 4px 0; font-size: 0.95rem; color: var(--text-main);">10-Year Wealth Projection Forecast</h5>
+              <p class="subtitle" style="font-size: 0.78rem; margin-bottom: 15px;">Estimated compounding value at the expected CAGR rate.</p>
+              
+              <div class="projections-summary-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">
+                <div class="proj-stat">
+                  <span class="stat-label" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-bottom: 4px;">In 3 Years (FV)</span>
+                  <div class="stat-val font-mono" id="proj-3y" style="font-weight: 600; color: var(--accent-cyan); font-size: 0.95rem;">₹3,16,100.00</div>
+                </div>
+                <div class="proj-stat">
+                  <span class="stat-label" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-bottom: 4px;">In 5 Years (FV)</span>
+                  <div class="stat-val font-mono" id="proj-5y" style="font-weight: 600; color: var(--accent-violet); font-size: 0.95rem;">₹3,96,500.00</div>
+                </div>
+                <div class="proj-stat">
+                  <span class="stat-label" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-bottom: 4px;">In 10 Years (FV)</span>
+                  <div class="stat-val font-mono" id="proj-10y" style="font-weight: 600; color: var(--accent-gold); font-size: 0.95rem;">₹6,98,900.00</div>
+                </div>
               </div>
             </div>
           </div>
@@ -518,27 +588,66 @@
               </div>
               <div class="gauge-bar-full">
                 <div class="gauge-bar-indicator" id="gold-advisory-gauge" style="left: 50%;"></div>
+            </div>
+          </div>
+
+          <!-- AI Market Analyst Section -->
+          <div class="glass-section ai-market-analyst-section mt-4" style="margin-top: 20px;">
+            <h4>AI Market Analyst (One-Click Summary)</h4>
+            <p class="subtitle">Audits live Nifty/Gold technical stats & Google news briefs to generate high-level macro investing advice.</p>
+            
+            <button id="ai-market-audit-btn" class="action-btn w-full mt-3" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet)); color: #fff; border: none; padding: 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2); transition: transform 0.2s;">
+              <i data-lucide="sparkles"></i> Run Financial Sentiment Audit
+            </button>
+            
+            <div class="terminal-advisor mt-3" style="margin-top: 15px; background: #000; border: 1px solid rgba(0,255,0,0.15); border-radius: 8px; padding: 12px; box-shadow: 0 0 20px rgba(0,255,0,0.03) inset;">
+              <div class="terminal-header" style="display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 8px;">
+                <span class="dot red" style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444;"></span>
+                <span class="dot yellow" style="width: 8px; height: 8px; border-radius: 50%; background: #facc15;"></span>
+                <span class="dot green" style="width: 8px; height: 8px; border-radius: 50%; background: #22c55e;"></span>
+                <span class="terminal-title font-mono" style="font-size: 0.65rem; color: rgba(255,255,255,0.4); margin-left: 6px;">sentiment_audit.sh</span>
               </div>
-              <div class="gauge-status-title" id="gold-advisory-gauge-status">DCA Accumulate</div>
+              <div class="terminal-content font-mono" id="ai-market-terminal-output" style="font-size: 0.78rem; color: #22c55e; line-height: 1.5; min-height: 100px; max-height: 200px; overflow-y: auto; text-shadow: 0 0 2px #22c55e;">
+                System idle. Click the button above to generate a live market advisory report...
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Price Alerts Section -->
+          <div class="glass-section price-alerts-section mt-4" style="margin-top: 20px;">
+            <h4>Custom Price Alerts & Rules</h4>
+            <p class="subtitle">Set targets for Gold and Nifty 50. Fires native desktop notifications when triggered.</p>
+            
+            <div class="alerts-form-grid mt-3" style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
+              <div class="calc-input" style="display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 0.75rem; color: var(--text-muted);">Asset</label>
+                <select id="alert-asset" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); border-radius: 6px; padding: 6px 10px; font-size: 0.82rem; outline: none; cursor: pointer; width: 100%;">
+                  <option value="nifty">Nifty 50</option>
+                  <option value="gold">Gold 24K (1g)</option>
+                </select>
+              </div>
+              <div class="calc-input" style="display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 0.75rem; color: var(--text-muted);">Trigger Condition</label>
+                <select id="alert-condition" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); border-radius: 6px; padding: 6px 10px; font-size: 0.82rem; outline: none; cursor: pointer; width: 100%;">
+                  <option value="above">Goes Above (>)</option>
+                  <option value="below">Goes Below (&lt;)</option>
+                </select>
+              </div>
+              <div class="calc-input" style="display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 0.75rem; color: var(--text-muted);">Target Price (₹)</label>
+                <input type="number" id="alert-price" value="15000" min="1" step="1" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); border-radius: 6px; padding: 6px 10px; font-size: 0.82rem; outline: none; width: 100%;">
+              </div>
+              <button id="add-alert-btn" class="action-btn w-full mt-3" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: var(--text-main); padding: 8px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem; transition: background 0.2s;">
+                <i data-lucide="bell"></i> Add Alert Rule
+              </button>
             </div>
 
-            <div class="advisory-list">
-              <div class="advisory-item">
-                <div class="adv-label">Monthly Range (1g)</div>
-                <div class="adv-desc">The 1-month low and high bounds for 24K Gold in India.</div>
-                <div class="adv-badge font-mono" id="gold-adv-range-val">₹-- - ₹--</div>
-              </div>
-              
-              <div class="advisory-item">
-                <div class="adv-label">Current Position</div>
-                <div class="adv-desc">Percentile position of today's price relative to the 1-month range.</div>
-                <div class="adv-badge font-mono" id="gold-adv-pos-val">---</div>
-              </div>
-
-              <div class="advisory-item">
-                <div class="adv-label">Gold SIP Strategy</div>
-                <div class="adv-desc">Actionable advice for paying your monthly Gold accumulation SIP.</div>
-                <div class="adv-badge badge-full font-mono" id="gold-adv-strategy-val">DCA Accumulate</div>
+            <div class="active-alerts-list-container mt-4" style="margin-top: 20px;">
+              <h5 style="margin: 0 0 10px 0; font-size: 0.9rem; color: var(--text-main); border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">Active Price Alerts</h5>
+              <div class="alerts-scroll-container" style="max-height: 150px; overflow-y: auto;">
+                <ul class="alerts-list font-mono" id="active-alerts-ul" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px;">
+                  <li class="text-muted text-center" style="font-size: 0.78rem; padding: 10px; color: var(--text-muted);">No active price alerts set.</li>
+                </ul>
               </div>
             </div>
           </div>

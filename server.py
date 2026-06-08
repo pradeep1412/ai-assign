@@ -13,14 +13,13 @@ PORT = 8080
 CACHE = {
     'nifty50': None,
     'niftyTime': 0,
-    'gold': None,
-    'goldTime': 0,
     'usdInr': None,
-    'usdInrTime': 0
+    'usdInrTime': 0,
+    'gold': {} # Keyed by city name: {'data': ..., 'time': ...}
 }
 
 # Helper function to fetch URL with custom user-agent and timeout
-def fetch_url(url, headers=None, method='GET', data=None):
+def fetch_url(url, headers=None, method='GET', data=None, timeout=10):
     default_headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
@@ -39,7 +38,7 @@ def fetch_url(url, headers=None, method='GET', data=None):
         data_bytes = None
 
     try:
-        with urllib.request.urlopen(req, data=data_bytes, timeout=10) as response:
+        with urllib.request.urlopen(req, data=data_bytes, timeout=timeout) as response:
             status = response.status
             headers_dict = dict(response.info())
             body = response.read().decode('utf-8')
@@ -137,6 +136,18 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
         global CACHE
         now = time.time()
         
+        # Parse city query parameter
+        city = 'bangalore'
+        if '?' in self.path:
+            query_part = self.path.split('?', 1)[1]
+            params = query_part.split('&')
+            for p in params:
+                if p.startswith('city='):
+                    city = p.split('=', 1)[1]
+        
+        valid_cities = ['bangalore', 'mumbai', 'delhi', 'chennai', 'kolkata', 'hyderabad']
+        active_city = city if city in valid_cities else 'bangalore'
+        
         # 1. Fetch USD/INR Rate
         usd_data = None
         if CACHE.get('usdInr') and (now - CACHE.get('usdInrTime', 0) < 30 * 60):
@@ -197,7 +208,7 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                         if prices:
                             if abs(prices[-1] - current_price) > 0.01:
                                 prices.append(current_price)
-                            nifty_data['historical'] = [round(p, 2) for p in prices[-10:]]
+                            nifty_data['historical'] = [round(p, 2) for p in prices[-30:]]
 
                             rsi = calculate_rsi(prices, 14)
                             nifty_data['rsi'] = rsi
@@ -254,9 +265,7 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                             
                             base = current_price
                             nifty_data['historical'] = [
-                                round(base - 200, 2), round(base - 150, 2), round(base - 100, 2),
-                                round(base - 120, 2), round(base - 50, 2), round(base - 80, 2),
-                                round(base - 30, 2), round(base - 10, 2), round(base + 20, 2), round(base, 2)
+                                round(base - 200 + i * 8 + (i % 7) * 12, 2) for i in range(30)
                             ]
                             nifty_data['rsi'] = 48.5
                             nifty_data['sma20'] = round(current_price - 50, 2)
@@ -275,7 +284,9 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                     nifty_data['change'] = -49.85
                     nifty_data['changePercent'] = -0.21
                     nifty_data['recommendation'] = "Accumulate (DCA - Fallback)"
-                    nifty_data['historical'] = [23100, 23150, 23200, 23120, 23300, 23250, 23280, 23310, 23330, 23366.70]
+                    nifty_data['historical'] = [
+                        round(23100 + i * 9.2 + (i % 5) * 8, 2) for i in range(30)
+                    ]
                     nifty_data['rsi'] = 51.5
                     nifty_data['sma20'] = 23250.00
                     nifty_data['monthlyMin'] = 23100.00
@@ -288,8 +299,9 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
 
         # 3. Fetch Gold rates (USD International spot & INR Domestic retail)
         gold_data = None
-        if CACHE.get('gold') and (now - CACHE.get('goldTime', 0) < 30 * 60):
-            gold_data = CACHE['gold']
+        city_cache = CACHE['gold'].get(active_city)
+        if city_cache and (now - city_cache['time'] < 30 * 60):
+            gold_data = city_cache['data']
         else:
             gold_data = {
                 "priceUSD_oz": 0.0,
@@ -301,7 +313,8 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                 "monthlyMin": 0.0,
                 "monthlyMax": 0.0,
                 "percentile": 50.0,
-                "sipRecommendation": "Accumulate (DCA)"
+                "sipRecommendation": "Accumulate (DCA)",
+                "historical": []
             }
             current_gold_usd = 4328.00
             change_pct = 0.12
@@ -345,7 +358,7 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
             price_22k = 0.0
 
             try:
-                gr_status, _, gr_body = fetch_url('https://www.goodreturns.in/gold-rates/bangalore.html')
+                gr_status, _, gr_body = fetch_url(f'https://www.goodreturns.in/gold-rates/{active_city}.html')
                 if gr_status == 200:
                     p24_match = re.search(r'id="24K-price"[^>]*>&#x20b9;([\d,]+)</span>', gr_body)
                     p22_match = re.search(r'id="22K-price"[^>]*>&#x20b9;([\d,]+)</span>', gr_body)
@@ -408,14 +421,23 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                     gold_data['sipRecommendation'] = "🟡 Average Price (DCA Accumulate)"
                 else:
                     gold_data['sipRecommendation'] = "🔴 Price is High (Wait for Dip / Small DCA)"
+                
+                gold_data['historical'] = [round(p, 2) for p in gold_history_inr_1g[-30:]]
             else:
                 gold_data['monthlyMin'] = round(price_24k_1g * 0.98, 2)
                 gold_data['monthlyMax'] = round(price_24k_1g * 1.02, 2)
                 gold_data['percentile'] = 50.0
                 gold_data['sipRecommendation'] = "🟡 Average Price (DCA - Fallback Estimate)"
+                
+                base = price_24k_1g
+                gold_data['historical'] = [
+                    round(base - 20 + i * 0.2 + (i % 6) * 1.5, 2) for i in range(30)
+                ]
             
-            CACHE['gold'] = gold_data
-            CACHE['goldTime'] = now
+            CACHE['gold'][active_city] = {
+                'data': gold_data,
+                'time': now
+            }
 
         response_data = {
             "nifty50": nifty_data,
@@ -518,7 +540,7 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                 "max_tokens": 1024
             }
 
-            status, resp_headers, resp_body = fetch_url(url, headers=request_headers, method='POST', data=nvidia_payload)
+            status, resp_headers, resp_body = fetch_url(url, headers=request_headers, method='POST', data=nvidia_payload, timeout=30)
             
             content = ""
             input_tokens = 0
@@ -575,7 +597,7 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
                 }
             }
 
-            status, resp_headers, resp_body = fetch_url(url, headers=request_headers, method='POST', data=gemini_payload)
+            status, resp_headers, resp_body = fetch_url(url, headers=request_headers, method='POST', data=gemini_payload, timeout=30)
 
             content = ""
             input_tokens = 0

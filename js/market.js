@@ -1,8 +1,14 @@
+import { settingsState } from './settings.js?v=1.1';
+import { sessionStats } from './app.js?v=1.3';
+
 let goldRate24kPerGram = 0.0;
 let goldRate22kPerGram = 0.0;
 let usdInrRate = 83.50;
 
 document.addEventListener('DOMContentLoaded', () => {
+  let activeChartAsset = 'nifty';
+  let lastFetchedData = null;
+
   // Elements
   const tickerNifty = document.getElementById('ticker-nifty');
   const tickerGold = document.getElementById('ticker-gold');
@@ -41,7 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 1. Fetch live market telemetry
   async function fetchMarketData() {
     try {
-      const response = await fetch('/api/market');
+      const city = localStorage.getItem('selected_gold_city') || 'bangalore';
+      const response = await fetch(`/api/market?city=${city}`);
       if (!response.ok) throw new Error("Failed to fetch market rates");
       
       const data = await response.json();
@@ -55,13 +62,16 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Store in localStorage cache
       localStorage.setItem('cached_market_data', JSON.stringify(data));
+      lastFetchedData = data;
       updateMarketUI(data);
+      checkPriceAlerts(data);
     } catch (error) {
       console.error("Market fetch error, trying local cache:", error);
       const cached = localStorage.getItem('cached_market_data');
       if (cached) {
         try {
           const cachedData = JSON.parse(cached);
+          lastFetchedData = cachedData;
           updateMarketUI(cachedData, true);
         } catch (e) {
           console.error("Cache parse error", e);
@@ -242,21 +252,51 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // d. Render SVG chart sparkline
-    if (data.nifty50.historical && data.nifty50.historical.length > 0) {
-      drawNiftyChart(data.nifty50.historical);
+    // Set city label in gold card header
+    const citySelectElement = document.getElementById('gold-city-select');
+    const cityLabelElement = document.getElementById('gold-city-label');
+    if (citySelectElement && cityLabelElement) {
+      const cityName = citySelectElement.options[citySelectElement.selectedIndex].text;
+      cityLabelElement.textContent = `🇮🇳 ${cityName} (24K 1g):`;
+    }
+
+    // d. Render SVG chart
+    if (activeChartAsset === 'nifty') {
+      if (data.nifty50.historical && data.nifty50.historical.length > 0) {
+        drawMarketChart('nifty', data.nifty50.historical);
+      }
+    } else {
+      if (data.gold.historical && data.gold.historical.length > 0) {
+        drawMarketChart('gold', data.gold.historical);
+      }
     }
 
     // Run gold calculations initially
     calculateGoldPrice();
     // Record current rate and render tracking panel
     trackAndRenderGold(goldRate24kPerGram);
+    // Refresh portfolio calculation
+    calculatePortfolio();
   }
 
-  // 3. Draw Inline SVG Sparkline Chart
-  function drawNiftyChart(prices) {
+  // 3. Draw Interactive SVG Sparkline Chart (Nifty or Gold)
+  function drawMarketChart(type, prices) {
     const svg = document.getElementById('nifty-chart');
     if (!svg) return;
+
+    // Generate dates sequence for 30 points
+    const dates = [];
+    const today = new Date();
+    for (let i = prices.length - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      dates.push(d.toLocaleDateString('en-CA')); // YYYY-MM-DD
+    }
+
+    // Set colors based on asset
+    const accentColor = type === 'nifty' ? 'var(--accent-cyan)' : 'var(--accent-gold)';
+    const gradientId = type === 'nifty' ? 'chart-gradient-nifty' : 'chart-gradient-gold';
+    const stopColor = type === 'nifty' ? 'var(--accent-cyan)' : 'var(--accent-gold)';
 
     // Dimensions
     const width = 800;
@@ -270,15 +310,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const chartHeight = height - paddingTop - paddingBottom;
 
     // Find bounds
-    const minVal = Math.min(...prices) * 0.998;
-    const maxVal = Math.max(...prices) * 1.002;
+    const minVal = Math.min(...prices) * 0.995;
+    const maxVal = Math.max(...prices) * 1.005;
     const valRange = maxVal - minVal;
 
     // Points mapper
     const points = prices.map((price, index) => {
       const x = paddingLeft + (index / (prices.length - 1)) * chartWidth;
       const y = paddingTop + chartHeight - ((price - minVal) / valRange) * chartHeight;
-      return { x, y, price };
+      return { x, y, price, date: dates[index] };
     });
 
     // Path definitions
@@ -293,9 +333,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // SVG content generation
     let svgContent = `
       <defs>
-        <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--accent-cyan)" stop-opacity="0.3"/>
-          <stop offset="100%" stop-color="var(--accent-cyan)" stop-opacity="0.0"/>
+        <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${stopColor}" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="${stopColor}" stop-opacity="0.0"/>
         </linearGradient>
       </defs>
     `;
@@ -307,40 +347,95 @@ document.addEventListener('DOMContentLoaded', () => {
       const yPos = paddingTop + chartHeight - (i / gridLinesCount) * chartHeight;
       
       svgContent += `
-        <line class="chart-grid-line" x1="${paddingLeft}" y1="${yPos}" x2="${width - paddingRight}" y2="${yPos}" />
-        <text class="chart-text" x="${paddingLeft - 10}" y="${yPos + 4}" text-anchor="end">${Math.round(yVal).toLocaleString('en-IN')}</text>
+        <line class="chart-grid-line" x1="${paddingLeft}" y1="${yPos}" x2="${width - paddingRight}" y2="${yPos}" style="stroke: rgba(255,255,255,0.05); stroke-dasharray: 4;" />
+        <text class="chart-text" x="${paddingLeft - 10}" y="${yPos + 4}" text-anchor="end" fill="var(--text-muted)" style="font-size: 0.65rem; font-family: var(--font-mono);">${Math.round(yVal).toLocaleString('en-IN')}</text>
       `;
     }
 
     // Draw axis lines
     svgContent += `
-      <line class="chart-axis-line" x1="${paddingLeft}" y1="${paddingTop + chartHeight}" x2="${width - paddingRight}" y2="${paddingTop + chartHeight}" />
-      <line class="chart-axis-line" x1="${paddingLeft}" y1="${paddingTop}" x2="${paddingLeft}" y2="${paddingTop + chartHeight}" />
+      <line class="chart-axis-line" x1="${paddingLeft}" y1="${paddingTop + chartHeight}" x2="${width - paddingRight}" y2="${paddingTop + chartHeight}" style="stroke: rgba(255,255,255,0.15);" />
+      <line class="chart-axis-line" x1="${paddingLeft}" y1="${paddingTop}" x2="${paddingLeft}" y2="${paddingTop + chartHeight}" style="stroke: rgba(255,255,255,0.15);" />
     `;
 
     // Plot line paths
     svgContent += `
-      <path class="chart-area" d="${areaD}" />
-      <path class="chart-line" d="${pathD}" />
+      <path class="chart-area" d="${areaD}" fill="url(#${gradientId})" />
+      <path class="chart-line" d="${pathD}" fill="none" stroke="${accentColor}" stroke-width="2.5" />
     `;
 
-    // Draw data points markers
+    // Draw active data point markers
     points.forEach((pt, idx) => {
-      // Highlight last point
       const isLast = idx === points.length - 1;
-      svgContent += `
-        <circle cx="${pt.x}" cy="${pt.y}" r="${isLast ? 6 : 4}" fill="${isLast ? 'var(--accent-cyan)' : 'var(--bg-app)'}" stroke="var(--accent-cyan)" stroke-width="2" />
-      `;
-      
-      // X-Axis time indicators (just days sequence)
-      if (idx % 2 === 0 || isLast) {
+      // Render key markers (start, mid, end)
+      if (idx === 0 || idx === Math.floor(points.length / 2) || isLast) {
         svgContent += `
-          <text class="chart-text" x="${pt.x}" y="${paddingTop + chartHeight + 20}" text-anchor="middle">T-${prices.length - 1 - idx}d</text>
+          <circle cx="${pt.x}" cy="${pt.y}" r="${isLast ? 5 : 3.5}" fill="${isLast ? accentColor : 'var(--bg-app)'}" stroke="${accentColor}" stroke-width="2" />
+        `;
+      }
+      
+      // X-Axis time indicators
+      if (idx % 6 === 0 || isLast) {
+        const dateFormatted = pt.date.substring(5); // MM-DD
+        svgContent += `
+          <text class="chart-text" x="${pt.x}" y="${paddingTop + chartHeight + 18}" text-anchor="middle" fill="var(--text-muted)" style="font-size: 0.65rem; font-family: var(--font-mono);">${dateFormatted}</text>
         `;
       }
     });
 
     svg.innerHTML = svgContent;
+
+    // Attach interactive hover events
+    const wrap = document.getElementById('nifty-svg-chart-wrap');
+    const crosshair = document.getElementById('chart-crosshair');
+    const tooltip = document.getElementById('chart-tooltip');
+
+    if (wrap && crosshair && tooltip) {
+      wrap.onmousemove = (e) => {
+        const rect = svg.getBoundingClientRect();
+        // Calculate relative coordinates in SVG viewBox system
+        const scaleX = width / rect.width;
+        const scaleY = height / rect.height;
+        const relativeX = (e.clientX - rect.left) * scaleX;
+        const relativeY = (e.clientY - rect.top) * scaleY;
+
+        if (relativeX >= paddingLeft && relativeX <= (width - paddingRight)) {
+          const mouseChartX = relativeX - paddingLeft;
+          const idx = Math.round((mouseChartX / chartWidth) * (prices.length - 1));
+          
+          if (idx >= 0 && idx < prices.length) {
+            const pt = points[idx];
+            
+            // Position crosshair (relative to container element rect width)
+            const crosshairLeft = (pt.x / scaleX);
+            crosshair.style.left = `${crosshairLeft}px`;
+            crosshair.classList.remove('hidden');
+
+            // Position tooltip
+            const tooltipLeft = (pt.x / scaleX) + 15;
+            const tooltipTop = (pt.y / scaleY) - 50;
+            tooltip.style.left = `${tooltipLeft}px`;
+            tooltip.style.top = `${tooltipTop}px`;
+            tooltip.style.borderColor = accentColor;
+            tooltip.classList.remove('hidden');
+
+            tooltip.querySelector('.tooltip-date').textContent = pt.date;
+            tooltip.querySelector('.tooltip-value').textContent = type === 'nifty'
+              ? `₹${pt.price.toLocaleString('en-IN')}`
+              : `₹${pt.price.toFixed(2)}/g`;
+            tooltip.querySelector('.tooltip-value').style.color = accentColor;
+          }
+        } else {
+          crosshair.classList.add('hidden');
+          tooltip.classList.add('hidden');
+        }
+      };
+
+      wrap.onmouseleave = () => {
+        crosshair.classList.add('hidden');
+        tooltip.classList.add('hidden');
+      };
+    }
   }
 
   // 4. Gold Tracker & Yearly Comparison Logic
@@ -528,6 +623,594 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('market-tab-opened', () => {
     fetchMarketData();
   });
+
+  // 6. Portfolio calculation and compounding growth projections
+  const portAsset = document.getElementById('port-asset');
+  const portType = document.getElementById('port-type');
+  const portAmountLabel = document.getElementById('port-amount-label');
+  const portAmount = document.getElementById('port-amount');
+  const portQtyLabel = document.getElementById('port-qty-label');
+  const portQty = document.getElementById('port-qty');
+  const portCagr = document.getElementById('port-cagr');
+
+  const portOutInvested = document.getElementById('port-out-invested');
+  const portOutCurrent = document.getElementById('port-out-current');
+  const portOutPnl = document.getElementById('port-out-pnl');
+
+  const proj3y = document.getElementById('proj-3y');
+  const proj5y = document.getElementById('proj-5y');
+  const proj10y = document.getElementById('proj-10y');
+
+  function calculatePortfolio() {
+    if (!portAsset || !portType || !portAmount || !portQty || !portCagr) return;
+    if (!lastFetchedData) return;
+
+    const asset = portAsset.value;
+    const type = portType.value;
+    const amountVal = parseFloat(portAmount.value) || 0;
+    const qtyVal = parseFloat(portQty.value) || 0;
+    const cagr = parseFloat(portCagr.value) || 0;
+
+    // Update labels dynamically based on type
+    if (type === 'lumpsum') {
+      if (portAmountLabel) portAmountLabel.textContent = "Average Buy Price (₹)";
+      if (portQtyLabel) portQtyLabel.textContent = "Quantity (Units)";
+    } else {
+      if (portAmountLabel) portAmountLabel.textContent = "Monthly SIP Amount (₹)";
+      if (portQtyLabel) portQtyLabel.textContent = "Duration (Months Paid)";
+    }
+
+    let currentLivePrice = 0;
+    let historicalPrices = [];
+
+    if (asset === 'nifty') {
+      currentLivePrice = lastFetchedData.nifty50.price;
+      historicalPrices = lastFetchedData.nifty50.historical || [];
+    } else {
+      currentLivePrice = goldRate24kPerGram;
+      historicalPrices = lastFetchedData.gold.historical || [];
+    }
+
+    let invested = 0;
+    let currentValuation = 0;
+
+    if (type === 'lumpsum') {
+      invested = amountVal * qtyVal;
+      currentValuation = currentLivePrice * qtyVal;
+    } else {
+      invested = amountVal * qtyVal; // amountVal is monthly SIP, qtyVal is months paid
+      
+      // Calculate SIP P&L based on historical/average rates
+      const avgPrice = historicalPrices.length > 0
+        ? (historicalPrices.reduce((a, b) => a + b, 0) / historicalPrices.length)
+        : currentLivePrice;
+
+      const accumulatedUnits = invested / avgPrice;
+      currentValuation = accumulatedUnits * currentLivePrice;
+    }
+
+    const pnl = currentValuation - invested;
+    const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+
+    const fmtINR = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(val);
+
+    if (portOutInvested) portOutInvested.textContent = fmtINR(invested);
+    if (portOutCurrent) portOutCurrent.textContent = fmtINR(currentValuation);
+    
+    if (portOutPnl) {
+      const sign = pnl >= 0 ? '+' : '';
+      portOutPnl.textContent = `${sign}${fmtINR(pnl)} (${sign}${pnlPct.toFixed(2)}%)`;
+      portOutPnl.className = 'font-mono ' + (pnl >= 0 ? 'price-up' : 'price-down');
+    }
+
+    // Projections Future Value Projections
+    const years = [3, 5, 10];
+    const projections = {};
+
+    years.forEach(y => {
+      if (type === 'lumpsum') {
+        projections[y] = currentValuation * Math.pow(1 + cagr / 100, y);
+      } else {
+        const r = cagr / 12 / 100;
+        const n = y * 12;
+        const fvCurrent = currentValuation * Math.pow(1 + r, n);
+        let fvSip = 0;
+        if (r > 0) {
+          fvSip = amountVal * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
+        } else {
+          fvSip = amountVal * n;
+        }
+        projections[y] = fvCurrent + fvSip;
+      }
+    });
+
+    if (proj3y) proj3y.textContent = fmtINR(projections[3]);
+    if (proj5y) proj5y.textContent = fmtINR(projections[5]);
+    if (proj10y) proj10y.textContent = fmtINR(projections[10]);
+  }
+
+  // 7. Custom Price Alerts and list management
+  let activeAlerts = [];
+
+  function loadAlerts() {
+    const stored = localStorage.getItem('price_alerts');
+    if (stored) {
+      try {
+        activeAlerts = JSON.parse(stored);
+      } catch (e) {
+        console.error("Error loading alerts:", e);
+        activeAlerts = [];
+      }
+    } else {
+      activeAlerts = [];
+    }
+  }
+
+  function saveAlerts() {
+    localStorage.setItem('price_alerts', JSON.stringify(activeAlerts));
+  }
+
+  function renderAlerts() {
+    const alertsUl = document.getElementById('active-alerts-ul');
+    if (!alertsUl) return;
+
+    if (activeAlerts.length === 0) {
+      alertsUl.innerHTML = `<li class="text-muted text-center" style="font-size: 0.78rem; padding: 10px; color: var(--text-muted);">No active price alerts set.</li>`;
+      return;
+    }
+
+    alertsUl.innerHTML = activeAlerts.map(alert => {
+      const assetName = alert.asset === 'nifty' ? 'Nifty 50' : 'Gold 24K';
+      const condSign = alert.condition === 'above' ? '>' : '<';
+      const priceFormatted = alert.asset === 'nifty'
+        ? `₹${alert.price.toLocaleString('en-IN')}`
+        : `₹${alert.price.toFixed(2)}/g`;
+
+      return `
+        <li class="alert-item" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 6px; padding: 6px 10px; font-size: 0.75rem;">
+          <div>
+            <span style="color: ${alert.asset === 'nifty' ? 'var(--accent-cyan)' : 'var(--accent-gold)'}; font-weight: 600;">${assetName}</span>
+            <span class="text-muted">${condSign}</span>
+            <span style="font-weight: 600; color: var(--text-main);">${priceFormatted}</span>
+          </div>
+          <button class="delete-alert-btn text-btn" data-id="${alert.id}" style="color: var(--accent-red); cursor: pointer; padding: 2px 6px;">
+            <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
+          </button>
+        </li>
+      `;
+    }).join('');
+
+    alertsUl.querySelectorAll('.delete-alert-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        activeAlerts = activeAlerts.filter(a => a.id !== id);
+        saveAlerts();
+        renderAlerts();
+      });
+    });
+
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  function playAlertSound() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const playBeep = (freq, duration, delay) => {
+        setTimeout(() => {
+          const osc = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+          
+          osc.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          
+          gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+          
+          osc.start(audioCtx.currentTime);
+          osc.stop(audioCtx.currentTime + duration);
+        }, delay);
+      };
+
+      playBeep(880, 0.15, 0);
+      playBeep(1046.5, 0.25, 180);
+    } catch (e) {
+      console.warn("AudioContext block or not supported:", e);
+    }
+  }
+
+  function fireDesktopNotification(title, body) {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      new Notification(title, {
+        body: body,
+        icon: '/favicon.ico'
+      });
+    }
+  }
+
+  function checkPriceAlerts(data) {
+    if (!data || activeAlerts.length === 0) return;
+
+    const niftyPrice = data.nifty50.price;
+    const goldPrice = goldRate24kPerGram;
+
+    const remainingAlerts = [];
+    let triggeredCount = 0;
+
+    activeAlerts.forEach(alert => {
+      const currentPrice = alert.asset === 'nifty' ? niftyPrice : goldPrice;
+      let triggered = false;
+
+      if (alert.condition === 'above' && currentPrice > alert.price) {
+        triggered = true;
+      } else if (alert.condition === 'below' && currentPrice < alert.price) {
+        triggered = true;
+      }
+
+      if (triggered) {
+        triggeredCount++;
+        const assetName = alert.asset === 'nifty' ? 'Nifty 50' : 'Gold 24K';
+        const condWord = alert.condition === 'above' ? 'crossed above' : 'dropped below';
+        const targetFormatted = alert.asset === 'nifty'
+          ? `₹${alert.price.toLocaleString('en-IN')}`
+          : `₹${alert.price.toFixed(2)}`;
+        const currentFormatted = alert.asset === 'nifty'
+          ? `₹${currentPrice.toLocaleString('en-IN')}`
+          : `₹${currentPrice.toFixed(2)}`;
+
+        const title = `🚨 Price Alert Triggered!`;
+        const body = `${assetName} has ${condWord} your target of ${targetFormatted} (Current: ${currentFormatted}).`;
+
+        playAlertSound();
+        fireDesktopNotification(title, body);
+
+        if (window.showToast) {
+          window.showToast(`${assetName} alert triggered: ${currentFormatted}!`, "warning");
+        }
+      } else {
+        remainingAlerts.push(alert);
+      }
+    });
+
+    if (triggeredCount > 0) {
+      activeAlerts = remainingAlerts;
+      saveAlerts();
+      renderAlerts();
+    }
+  }
+
+  // Helper to extract top 5 news titles from DOM
+  const getTopHeadlines = () => {
+    let titles = Array.from(document.querySelectorAll('.news-card-title'))
+      .map(el => el.textContent.trim());
+    if (titles.length === 0) {
+      titles = Array.from(document.querySelectorAll('.brief-item > div:first-child'))
+        .map(el => el.textContent.trim());
+    }
+    return titles.slice(0, 5);
+  };
+
+  // Helper function to resolve provider config for chat APIs
+  function resolveAIConfig() {
+    const modelSelector = document.getElementById('chat-model-selector');
+    let activeProvider = settingsState.summaryProvider || 'auto';
+
+    if (activeProvider === 'auto') {
+      const selectedOption = modelSelector ? modelSelector.options[modelSelector.selectedIndex] : null;
+      const optGroupLabel = selectedOption ? (selectedOption.parentNode.label || '') : '';
+
+      if (optGroupLabel.includes('Google') && settingsState.googleKey) {
+        activeProvider = 'google';
+      } else if (optGroupLabel.includes('Nvidia') && settingsState.nvidiaKey) {
+        activeProvider = 'nvidia';
+      } else {
+        activeProvider = settingsState.googleKey ? 'google' : (settingsState.nvidiaKey ? 'nvidia' : null);
+      }
+    }
+
+    let activeKey = activeProvider === 'nvidia' ? settingsState.nvidiaKey : settingsState.googleKey;
+    let activeModel = '';
+
+    if (activeProvider === 'nvidia') {
+      activeModel = (modelSelector && (modelSelector.value.startsWith('nvidia/') || modelSelector.value.startsWith('meta/') || modelSelector.value.startsWith('mistralai/') || modelSelector.value.startsWith('openai/')))
+        ? modelSelector.value
+        : 'nvidia/llama-3.1-nemotron-70b-instruct';
+    } else {
+      activeModel = (modelSelector && (modelSelector.value.startsWith('gemini-') || modelSelector.value.startsWith('gemma-')))
+        ? modelSelector.value
+        : 'gemini-3.5-flash';
+    }
+
+    return { activeProvider, activeKey, activeModel };
+  }
+
+  let typingTimeoutId = null;
+  function typeWriter(element, text, delay = 15) {
+    if (typingTimeoutId) clearTimeout(typingTimeoutId);
+    element.textContent = '';
+    let i = 0;
+    function type() {
+      if (i < text.length) {
+        element.textContent += text.charAt(i);
+        i++;
+        typingTimeoutId = setTimeout(type, delay);
+      }
+    }
+    type();
+  }
+
+  // 8. Event Listeners for Portfolio Tracker Inputs
+  if (portAsset) {
+    portAsset.addEventListener('change', () => {
+      if (portType.value === 'lumpsum') {
+        if (portAsset.value === 'nifty') {
+          portAmount.value = 22500;
+          portQty.value = 10;
+        } else {
+          portAmount.value = 7000;
+          portQty.value = 50;
+        }
+      }
+      calculatePortfolio();
+    });
+  }
+
+  if (portType) {
+    portType.addEventListener('change', () => {
+      if (portType.value === 'sip') {
+        portAmount.value = 5000;
+        portQty.value = 12;
+      } else {
+        if (portAsset.value === 'nifty') {
+          portAmount.value = 22500;
+          portQty.value = 10;
+        } else {
+          portAmount.value = 7000;
+          portQty.value = 50;
+        }
+      }
+      calculatePortfolio();
+    });
+  }
+
+  if (portAmount) portAmount.addEventListener('input', calculatePortfolio);
+  if (portQty) portQty.addEventListener('input', calculatePortfolio);
+  if (portCagr) portCagr.addEventListener('input', calculatePortfolio);
+
+  // 9. Interactive Chart Asset Toggles
+  const chartBtnNifty = document.getElementById('chart-btn-nifty');
+  const chartBtnGold = document.getElementById('chart-btn-gold');
+  const chartMainTitle = document.getElementById('chart-main-title');
+  const chartSubTitle = document.getElementById('chart-sub-title');
+
+  if (chartBtnNifty && chartBtnGold) {
+    chartBtnNifty.addEventListener('click', () => {
+      activeChartAsset = 'nifty';
+      chartBtnNifty.classList.add('active');
+      chartBtnGold.classList.remove('active');
+      if (chartMainTitle) chartMainTitle.textContent = "Nifty 50 Trend Sparkline";
+      if (chartSubTitle) chartSubTitle.textContent = "Visualizing closing prices for index over the past 30 days.";
+      if (lastFetchedData && lastFetchedData.nifty50.historical) {
+        drawMarketChart('nifty', lastFetchedData.nifty50.historical);
+      }
+    });
+
+    chartBtnGold.addEventListener('click', () => {
+      activeChartAsset = 'gold';
+      chartBtnGold.classList.add('active');
+      chartBtnNifty.classList.remove('active');
+      if (chartMainTitle) chartMainTitle.textContent = "Gold 24K Trend Sparkline";
+      if (chartSubTitle) chartSubTitle.textContent = "Visualizing daily rates (per gram) in selected city over the past 30 days.";
+      if (lastFetchedData && lastFetchedData.gold.historical) {
+        drawMarketChart('gold', lastFetchedData.gold.historical);
+      }
+    });
+  }
+
+  // 10. AI Sentiment Analyst Listener
+  const aiAuditBtn = document.getElementById('ai-market-audit-btn');
+  const aiTerminalOutput = document.getElementById('ai-market-terminal-output');
+
+  if (aiAuditBtn && aiTerminalOutput) {
+    aiAuditBtn.addEventListener('click', async () => {
+      if (!lastFetchedData) {
+        aiTerminalOutput.textContent = "Error: Market telemetry data not loaded yet.";
+        return;
+      }
+
+      const { activeProvider, activeKey, activeModel } = resolveAIConfig();
+
+      if (!activeKey) {
+        aiTerminalOutput.textContent = "Error: No API key configured. Please enter your Google or Nvidia API key in the Settings tab.";
+        if (window.showToast) {
+          window.showToast("API Key is missing! Set it in Settings.", "error");
+        }
+        return;
+      }
+
+      aiAuditBtn.disabled = true;
+      aiAuditBtn.innerHTML = `<i data-lucide="loader" class="animate-spin" style="animation: spin 1s linear infinite; display: inline-block; margin-right: 6px;"></i> Auditing Market...`;
+      if (window.lucide) window.lucide.createIcons();
+      aiTerminalOutput.textContent = "Connecting to AI Analyst server...\nAnalyzing technical trends...\nSynthesizing news feeds...";
+
+      const headlines = getTopHeadlines().map((h, i) => `${i + 1}. ${h}`).join('\n');
+      const citySelect = document.getElementById('gold-city-select');
+      const cityName = citySelect ? citySelect.options[citySelect.selectedIndex].text : 'Bengaluru';
+
+      const prompt = `You are a financial macro analyst and advisor. Audit the current market indicators below and write a brief, high-level investment advice report.
+
+Market Data:
+- Nifty 50 Index: ₹${lastFetchedData.nifty50.price.toLocaleString('en-IN')} (Change: ${lastFetchedData.nifty50.changePercent}%, RSI: ${lastFetchedData.nifty50.rsi}, Rec: ${lastFetchedData.nifty50.sipRecommendation || lastFetchedData.nifty50.recommendation})
+- Gold 24K Rate (${cityName}): ₹${goldRate24kPerGram.toFixed(2)}/g (Ounce USD: $${lastFetchedData.gold.priceUSD_oz})
+- USD to INR Rate: ₹${usdInrRate.toFixed(2)}
+
+Top News Headlines:
+${headlines || 'No recent headlines available.'}
+
+Instructions:
+- Provide exactly 3 bullet points of macro investing advice.
+- Be concise (maximum 15 words per bullet point).
+- Make sure one bullet point discusses Stocks/Nifty, one discusses Gold/Hedging, and one discusses currency/USD-INR or macro trends.
+- Use terminal green font friendly format. Do not use markdown headers or bold indicators.
+- Output ONLY the 3 bullet points, using '-' as the bullet. No intro or outro.`;
+
+      let currentModel = activeModel;
+      let retries = 0;
+      const maxRetries = 3;
+      let success = false;
+      let finalError = '';
+
+      while (retries < maxRetries && !success) {
+        try {
+          const chatResponse = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': activeKey
+            },
+            body: JSON.stringify({
+              provider: activeProvider,
+              model: currentModel,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.3
+            })
+          });
+
+          const respStatus = chatResponse.status;
+          const respText = await chatResponse.text();
+
+          const isRateLimitResponse = (status, text) => {
+            return status === 429 || (text && text.toLowerCase().includes("rate limit"));
+          };
+
+          const getNextFailoverModel = (curr, google) => {
+            const GOOGLE_FAILOVER_LIST = [
+              'gemma-4-31b-it',
+              'gemma-4-26b-a4b-it',
+              'gemini-3.1-flash-lite',
+              'gemini-3.5-flash',
+              'gemini-3-flash',
+              'gemini-2.5-flash-lite',
+              'gemini-2.5-flash'
+            ];
+            const NVIDIA_FAILOVER_LIST = [
+              'nvidia/llama-3.1-nemotron-70b-instruct',
+              'meta/llama-3.3-70b-instruct',
+              'mistralai/mixtral-8x22b-v0.1',
+              'openai/gpt-oss-120b'
+            ];
+            const list = google ? GOOGLE_FAILOVER_LIST : NVIDIA_FAILOVER_LIST;
+            const idx = list.indexOf(curr);
+            if (idx !== -1 && idx < list.length - 1) {
+              return list[idx + 1];
+            }
+            return list[0];
+          };
+
+          if (isRateLimitResponse(respStatus, respText)) {
+            const isGoogle = activeProvider === 'google';
+            currentModel = getNextFailoverModel(currentModel, isGoogle);
+            console.warn(`Audit: Rate limit on model. Failover to ${currentModel}...`);
+            if (window.showToast) {
+              window.showToast(`Audit rate limit. Switching model...`, "warning");
+            }
+            retries++;
+            continue;
+          }
+
+          if (!chatResponse.ok) {
+            throw new Error(respText || 'AI Audit call failed');
+          }
+
+          const result = JSON.parse(respText);
+          if (result.content) {
+            const inputT = result.tokens?.input || 0;
+            const outputT = result.tokens?.output || 0;
+            settingsState.addUsage(activeProvider, currentModel, inputT, outputT);
+            
+            if (sessionStats && typeof sessionStats.incrementChat === 'function') {
+              sessionStats.incrementChat();
+            }
+
+            typeWriter(aiTerminalOutput, result.content);
+            success = true;
+          } else {
+            throw new Error("Received empty response content from backend.");
+          }
+        } catch (error) {
+          console.error("AI Audit error:", error);
+          finalError = error.message;
+          retries++;
+        }
+      }
+
+      if (!success) {
+        aiTerminalOutput.textContent = `Error executing audit: ${finalError}\n\nPlease check your API key and connection, then try again.`;
+      }
+
+      aiAuditBtn.disabled = false;
+      aiAuditBtn.innerHTML = `<i data-lucide="sparkles"></i> Run Financial Sentiment Audit`;
+      if (window.lucide) window.lucide.createIcons();
+    });
+  }
+
+  // 11. Custom Price Alerts Event Listeners & Setup
+  const addAlertBtn = document.getElementById('add-alert-btn');
+  if (addAlertBtn) {
+    addAlertBtn.addEventListener('click', async () => {
+      if ('Notification' in window) {
+        await Notification.requestPermission();
+      }
+
+      const alertAsset = document.getElementById('alert-asset');
+      const alertCondition = document.getElementById('alert-condition');
+      const alertPrice = document.getElementById('alert-price');
+
+      if (!alertAsset || !alertCondition || !alertPrice) return;
+
+      const priceVal = parseFloat(alertPrice.value);
+      if (isNaN(priceVal) || priceVal <= 0) {
+        if (window.showToast) window.showToast("Please enter a valid price target.", "error");
+        return;
+      }
+
+      const newAlert = {
+        id: Date.now().toString(),
+        asset: alertAsset.value,
+        condition: alertCondition.value,
+        price: priceVal,
+        createdAt: new Date().toISOString()
+      };
+
+      activeAlerts.push(newAlert);
+      saveAlerts();
+      renderAlerts();
+
+      if (window.showToast) {
+        window.showToast(`Alert set for ${alertAsset.value === 'nifty' ? 'Nifty' : 'Gold'} at ₹${priceVal.toLocaleString('en-IN')}`, "success");
+      }
+    });
+  }
+
+  // 12. City Selector Dropdown Listener
+  const goldCitySelect = document.getElementById('gold-city-select');
+  if (goldCitySelect) {
+    const savedCity = localStorage.getItem('selected_gold_city');
+    if (savedCity) {
+      goldCitySelect.value = savedCity;
+    }
+    goldCitySelect.addEventListener('change', () => {
+      localStorage.setItem('selected_gold_city', goldCitySelect.value);
+      fetchMarketData();
+    });
+  }
+
+  // Load and render alerts on DOMContentLoaded
+  loadAlerts();
+  renderAlerts();
 
   // Load from local storage cache first for instant render on page load
   const cached = localStorage.getItem('cached_market_data');

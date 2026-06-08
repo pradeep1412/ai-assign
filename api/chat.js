@@ -53,7 +53,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(nvidiaPayload),
-        signal: AbortSignal.timeout(12000)
+        signal: AbortSignal.timeout(30000)
       });
 
       const status = apiResponse.status;
@@ -131,7 +131,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(geminiPayload),
-        signal: AbortSignal.timeout(12000)
+        signal: AbortSignal.timeout(30000)
       });
 
       const status = apiResponse.status;
