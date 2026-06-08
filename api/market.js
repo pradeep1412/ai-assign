@@ -287,7 +287,7 @@ export default async function handler(req, res) {
     let price22k = 0.0;
 
     try {
-      const grResponse = await fetch('https://www.goodreturns.in/gold-rates/', {
+      const grResponse = await fetch('https://www.goodreturns.in/gold-rates/bangalore.html', {
         headers: { 'User-Agent': userAgent },
         signal: AbortSignal.timeout(6000)
       });
@@ -326,8 +326,8 @@ export default async function handler(req, res) {
     // Step 3c: Fallback calculation if scraping fails
     if (!scrapedSuccess) {
       const rate = data.usdInr.rate;
-      // Apply 1.305 duty & premium multiplier
-      const goldINRPerGram = (currentGoldUSD * rate * 1.305) / 31.1034768;
+      // Apply 1.145 duty & premium multiplier (6% customs + 5% AIDC + 3% GST + premium)
+      const goldINRPerGram = (currentGoldUSD * rate * 1.145) / 31.1034768;
       price24k = goldINRPerGram * 10;
       price22k = price24k * 0.916;
 

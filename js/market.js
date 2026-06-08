@@ -427,16 +427,28 @@ document.addEventListener('DOMContentLoaded', () => {
         .slice(0, 31);
 
       if (sortedDaily.length > 0) {
-        dailyTbody.innerHTML = sortedDaily.map(([date, p]) => {
+        dailyTbody.innerHTML = sortedDaily.map(([date, p], idx) => {
           const isToday = date === todayStr;
           let statusText = isToday ? '<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: none; padding: 2px 6px;">Today</span>' : '<span class="text-muted">Recorded</span>';
           if (isToday && isLowest) {
             statusText = '<span class="badge" style="background: var(--accent-green-glow); color: var(--accent-green); border: none; padding: 2px 6px;">Lowest 📉</span>';
           }
+
+          let diffHtml = '';
+          if (idx < sortedDaily.length - 1) {
+            const prevP = sortedDaily[idx + 1][1];
+            const diff = p - prevP;
+            const diffPct = prevP ? (diff / prevP) * 100 : 0;
+            const isUp = diff >= 0;
+            const diffClass = isUp ? 'price-up' : 'price-down';
+            const diffSign = isUp ? '▲ +' : '▼ ';
+            diffHtml = `<span class="${diffClass}" style="font-size: 0.78rem; margin-left: 6px; font-weight: 500;">${diffSign}₹${Math.abs(diff).toFixed(2)} (${diffPct.toFixed(2)}%)</span>`;
+          }
+
           return `
             <tr>
               <td class="font-mono">${date}</td>
-              <td class="font-mono">₹${p.toFixed(2)}</td>
+              <td class="font-mono">₹${p.toFixed(2)}${diffHtml}</td>
               <td>${statusText}</td>
             </tr>
           `;

@@ -345,7 +345,7 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
             price_22k = 0.0
 
             try:
-                gr_status, _, gr_body = fetch_url('https://www.goodreturns.in/gold-rates/')
+                gr_status, _, gr_body = fetch_url('https://www.goodreturns.in/gold-rates/bangalore.html')
                 if gr_status == 200:
                     p24_match = re.search(r'id="24K-price"[^>]*>&#x20b9;([\d,]+)</span>', gr_body)
                     p22_match = re.search(r'id="22K-price"[^>]*>&#x20b9;([\d,]+)</span>', gr_body)
@@ -374,8 +374,8 @@ class LocalVercelEmulatorHandler(http.server.SimpleHTTPRequestHandler):
             # Step 3c: Fallback calculation if scraping fails
             if not scraped_success:
                 rate = usd_data['rate']
-                # Apply 1.305 multiplier to spot price to account for 15% customs duty, 3% GST, and IBJA retail premiums
-                gold_inr_per_gram = (current_gold_usd * rate * 1.305) / 31.1034768
+                # Apply 1.145 multiplier to spot price to account for 6% customs duty, AIDC, 3% GST, and IBJA retail premiums
+                gold_inr_per_gram = (current_gold_usd * rate * 1.145) / 31.1034768
                 price_24k = gold_inr_per_gram * 10
                 price_22k = price_24k * 0.916
                 

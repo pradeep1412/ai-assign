@@ -1,6 +1,6 @@
 import { settingsState } from './settings.js?v=1.1';
 import './pdf-reader.js?v=1.1';
-import './market.js?v=1.2';
+import './market.js?v=1.3';
 import './news.js?v=1.1';
 import './chat.js?v=1.1';
 
